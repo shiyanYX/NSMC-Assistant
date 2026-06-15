@@ -313,8 +313,12 @@ function App() {
         </aside>
         <div className={styles.contentArea}>
           <main className={styles.appMain}>
-            {currentNav === 'score' && <ScoreQuery account={currentUser} />}
-            {currentNav === 'evaluation' && <EvaluationQuery account={currentUser} />}
+            <div style={{ display: currentNav === 'score' ? '' : 'none' }}>
+              <ScoreQuery account={currentUser} />
+            </div>
+            <div style={{ display: currentNav === 'evaluation' ? '' : 'none' }}>
+              <EvaluationQuery account={currentUser} />
+            </div>
           </main>
           <footer className={styles.appFooter}>
             <span>川北医助手 | NSMC Assistant</span>
