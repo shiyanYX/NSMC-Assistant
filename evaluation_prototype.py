@@ -249,12 +249,14 @@ def submit_evaluation(session, hidden_fields, questions, duplicated_fields, do_s
 
     # 用列表，不用 dict——表单有重复字段名 (如 pj06xh 每题一个)
     form_data = []
-    # 添加所有隐藏字段
+    # 添加所有隐藏字段（跳过 issubmit，后面统一设置）
     for k, v in hidden_fields.items():
-        form_data.append((k, v))
+        if k != 'issubmit':
+            form_data.append((k, v))
     # 添加重复字段
     for k, v in duplicated_fields:
-        form_data.append((k, v))
+        if k != 'issubmit':
+            form_data.append((k, v))
 
     form_data.append(('issubmit', '1' if do_submit else '0'))
 
