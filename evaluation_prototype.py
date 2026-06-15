@@ -83,55 +83,59 @@ def get_batches(session):
 
 
 def get_teacher_list(session, list_url):
-    """Step 2: 进入某个批次，获取待评教师列表"""
+    """Step 2: 进入某个批次，获取所有页的待评教师列表"""
     full_url = BASE + list_url if list_url.startswith('/') else list_url
     print(f"\n=== Step 2: 获取教师列表 ===")
-    print(f"请求: {full_url}")
-    resp = session.get(full_url, verify=False, timeout=10)
-    print(f"响应 URL: {resp.url}")
 
-    soup = BeautifulSoup(resp.text, 'html.parser')
-    tables = soup.find_all('table')
-    print(f"找到 {len(tables)} 个表格")
+    all_teachers = []
+    page = 1
 
-    teachers = []
+    while True:
+        page_url = f"{full_url}&pageIndex={page}&isAll=1" if '?' in full_url else f"{full_url}?pageIndex={page}&isAll=1"
+        print(f"\n--- 第 {page} 页 ---")
+        print(f"请求: {page_url}")
+        resp = session.get(page_url, verify=False, timeout=10)
 
-    for table in tables:
-        rows = table.find_all('tr')
-        # 打印每行结构
-        for i, row in enumerate(rows[:3]):
-            ths = row.find_all('th')
-            tds = row.find_all('td')
-            if ths:
-                print(f"  表头 Row {i}: {[t.get_text(strip=True)[:25] for t in ths]}")
-            if tds:
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        tables = soup.find_all('table')
+
+        teachers_on_page = []
+
+        for table in tables:
+            rows = table.find_all('tr')
+            # 只看数据行 (index >= 1, 有 td)
+            for row in rows[1:]:
+                cells = row.find_all('td')
                 links = row.find_all('a')
-                hrefs = [f"{a.get_text(strip=True)} → {a.get('href','')[:60]}" for a in links]
-                print(f"  数据 Row {i}: TD={[c.get_text(strip=True)[:20] for c in tds]} | {hrefs if hrefs else '—'}")
+                for a in links:
+                    href = a.get('href', '')
+                    text = a.get_text(strip=True)
+                    if 'xspj_edit.do' in href or text in ('评价', '查看'):
+                        t = {
+                            'seq': cells[0].get_text(strip=True) if len(cells) > 0 else '?',
+                            'teacher_id': cells[1].get_text(strip=True) if len(cells) > 1 else '?',
+                            'teacher_name': cells[2].get_text(strip=True) if len(cells) > 2 else '?',
+                            'dept': cells[3].get_text(strip=True) if len(cells) > 3 else '?',
+                            'eval_type': cells[4].get_text(strip=True) if len(cells) > 4 else '?',
+                            'submitted': cells[7].get_text(strip=True) if len(cells) > 7 else '?',
+                            'url': href
+                        }
+                        teachers_on_page.append(t)
 
-    # 尝试解析
-    for table in tables:
-        rows = table.find_all('tr')
-        for row in rows[1:]:  # 跳过表头
-            cells = row.find_all('td')
-            links = row.find_all('a')
-            for a in links:
-                href = a.get('href', '')
-                text = a.get_text(strip=True)
-                if 'xspj_edit.do' in href or text == '评价':
-                    t = {
-                        'seq': cells[0].get_text(strip=True) if len(cells) > 0 else '?',
-                        'teacher_id': cells[1].get_text(strip=True) if len(cells) > 1 else '?',
-                        'teacher_name': cells[2].get_text(strip=True) if len(cells) > 2 else '?',
-                        'dept': cells[3].get_text(strip=True) if len(cells) > 3 else '?',
-                        'eval_type': cells[4].get_text(strip=True) if len(cells) > 4 else '?',
-                        'submitted': cells[6].get_text(strip=True) if len(cells) > 6 else '?',
-                        'url': href
-                    }
-                    teachers.append(t)
-                    print(f"  ✓ {t['seq']}. {t['teacher_name']} [{t['dept']}] - 已提交:{t['submitted']}")
+        if not teachers_on_page:
+            print(f"  第 {page} 页无数据，停止翻页")
+            break
 
-    return teachers
+        for t in teachers_on_page:
+            status = '✓已评' if t['submitted'] == '是' else '待评'
+            print(f"  {status} {t['teacher_name']} [{t['dept']}]")
+
+        all_teachers.extend(teachers_on_page)
+        page += 1
+
+    unsubmitted = [t for t in all_teachers if t['submitted'] != '是']
+    print(f"\n总计: {len(all_teachers)} 位教师, 未评: {len(unsubmitted)} 位")
+    return all_teachers
 
 
 def fetch_evaluation_form(session, edit_url):
