@@ -90,7 +90,8 @@ def get_teacher_list(session, list_url):
 
     all_teachers = []
     page = 1
-    max_pages = 20  # 安全上限
+    max_pages = 20
+    seen_names = set()  # 防重复（系统可能是回环而不是空页）
 
     while page <= max_pages:
         # 用 pageIndex 参数翻页
@@ -109,7 +110,6 @@ def get_teacher_list(session, list_url):
 
         for table in tables:
             rows = table.find_all('tr')
-            # 只看数据行 (index >= 1, 有 td)
             for row in rows[1:]:
                 cells = row.find_all('td')
                 links = row.find_all('a')
@@ -127,6 +127,16 @@ def get_teacher_list(session, list_url):
                             'url': href
                         }
                         teachers_on_page.append(t)
+
+        # 检测回环：本页第一条老师是否已在前几页出现
+        if teachers_on_page and teachers_on_page[0]['teacher_name'] in seen_names:
+            print(f"  检测到重复 → 已翻完所有页")
+            break
+
+        for t in teachers_on_page:
+            status = '✓已评' if t['submitted'] == '是' else '待评'
+            print(f"  {status} {t['teacher_name']} [{t['dept']}]")
+            seen_names.add(t['teacher_name'])  # 注意: 同名不同老师的极端情况，但实际教务不会有
 
         if not teachers_on_page:
             print(f"  第 {page} 页无数据，停止翻页")
