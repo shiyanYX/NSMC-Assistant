@@ -61,7 +61,11 @@ def get_evaluation_list(session):
     response = session.get(XSPJ_FIND_URL, verify=False, timeout=10)
     print(f"响应 URL: {response.url}")
 
-    # 检查是否成功获取列表页
+    # 保存页面以便分析
+    with open('xspj_list_page.html', 'w', encoding='utf-8') as f:
+        f.write(response.text)
+    print("列表页已保存到 xspj_list_page.html")
+
     soup = BeautifulSoup(response.text, 'html.parser')
 
     # 尝试找到列表表格
