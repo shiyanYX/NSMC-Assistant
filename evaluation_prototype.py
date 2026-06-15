@@ -107,6 +107,7 @@ def get_teacher_list(session, list_url):
         tables = soup.find_all('table')
 
         teachers_on_page = []
+        seen_on_page = set()
 
         for table in tables:
             rows = table.find_all('tr')
@@ -116,14 +117,18 @@ def get_teacher_list(session, list_url):
                 for a in links:
                     href = a.get('href', '')
                     text = a.get_text(strip=True)
-                    if 'xspj_edit.do' in href or text in ('评价', '查看'):
+                    if ('xspj_edit.do' in href or text in ('评价', '查看')) and len(cells) >= 8:
+                        tid = cells[1].get_text(strip=True)
+                        if tid == '教师编号' or tid in seen_on_page:
+                            continue  # 跳过表头和重复
+                        seen_on_page.add(tid)
                         t = {
-                            'seq': cells[0].get_text(strip=True) if len(cells) > 0 else '?',
-                            'teacher_id': cells[1].get_text(strip=True) if len(cells) > 1 else '?',
-                            'teacher_name': cells[2].get_text(strip=True) if len(cells) > 2 else '?',
-                            'dept': cells[3].get_text(strip=True) if len(cells) > 3 else '?',
-                            'eval_type': cells[4].get_text(strip=True) if len(cells) > 4 else '?',
-                            'submitted': cells[7].get_text(strip=True) if len(cells) > 7 else '?',
+                            'seq': cells[0].get_text(strip=True),
+                            'teacher_id': tid,
+                            'teacher_name': cells[2].get_text(strip=True),
+                            'dept': cells[3].get_text(strip=True),
+                            'eval_type': cells[4].get_text(strip=True),
+                            'submitted': cells[7].get_text(strip=True),
                             'url': href
                         }
                         teachers_on_page.append(t)
@@ -155,7 +160,7 @@ def get_teacher_list(session, list_url):
 
 
 def fetch_evaluation_form(session, edit_url):
-    """Step 3: 获取评价表单"""
+    """Step 3: 获取评价表单，解析题目和选项（保持显示顺序）"""
     full_url = BASE + edit_url if edit_url.startswith('/') else edit_url
     print(f"\n=== Step 3: 获取评价表单 ===")
     print(f"请求: {full_url}")
@@ -163,83 +168,117 @@ def fetch_evaluation_form(session, edit_url):
     soup = BeautifulSoup(resp.text, 'html.parser')
 
     hidden_fields = {}
+    duplicated_fields = []  # 同名多值字段 (如 pj06xh 每道题一个)
     for hidden in soup.find_all('input', type='hidden'):
         name = hidden.get('name')
         value = hidden.get('value', '')
-        if name:
+        if not name:
+            continue
+        if name in hidden_fields:
+            # 已有同名键，移到重复列表
+            if name not in {k for k, _ in duplicated_fields}:
+                duplicated_fields.append((name, hidden_fields[name]))
+            duplicated_fields.append((name, value))
+        else:
             hidden_fields[name] = value
 
-    print(f"隐藏字段 ({len(hidden_fields)} 个):")
-    for k, v in hidden_fields.items():
-        print(f"  {k} = {v}")
+    print(f"隐藏字段: {len(hidden_fields)} 个唯一 + {len(duplicated_fields)} 个重复")
 
-    questions = {}
-    all_radios = soup.find_all('input', type='radio')
-    for radio in all_radios:
-        name = radio.get('name', '')
-        if name.startswith('pj0601id_'):
-            seq = name.replace('pj0601id_', '')
-            title = radio.get('title', '?')
-            value = radio.get('value', '')
-            if seq not in questions:
-                questions[seq] = {'seq': seq, 'title_text': '', 'options': {}}
-            questions[seq]['options'][title] = value
+    # 按显示顺序提取题目 (遍历 tr 而不是 radio)
+    questions = []  # 改为列表，保持显示顺序
 
-    for tr in soup.find_all('tr'):
+    form_table = soup.find('table', id='table1')
+    if not form_table:
+        print("⚠ 未找到表单表格 #table1")
+        return hidden_fields, []
+
+    for tr in form_table.find_all('tr'):
         td = tr.find('td')
-        if td:
-            hidden = td.find('input', attrs={'name': 'pj06xh'})
-            if hidden:
-                seq = hidden.get('value', '')
-                text = td.get_text(strip=True)
-                text = text.replace(seq, '').strip()
-                if seq in questions:
-                    questions[seq]['title_text'] = text
+        if not td:
+            continue
+        # 找 pj06xh (题目序号)
+        pj06xh_input = td.find('input', attrs={'name': 'pj06xh'})
+        if not pj06xh_input:
+            continue
+        seq = pj06xh_input.get('value', '')
+        text = td.get_text(strip=True)
+        text = text.replace(seq, '').strip()
 
-    print(f"\n题目 ({len(questions)} 道):")
-    for seq in sorted(questions.keys(), key=int):
-        q = questions[seq]
+        # 找对应的选项 radio (在相邻的 td 中)
+        opt_td = tr.find('td', attrs={'name': 'zbtd'})
+        options = {}
+        if opt_td:
+            for radio in opt_td.find_all('input', type='radio'):
+                opt_title = radio.get('title', '')
+                opt_value = radio.get('value', '')
+                opt_name = radio.get('name', '')
+                if opt_title and opt_value:
+                    options[opt_title] = opt_value
+                    # 记住 radio name (用于后续表单提交)
+                    # radio name 格式: pj0601id_{seq}
+                    if 'radio_name' not in locals() or True:
+                        pass
+
+        # 提取 radio name
+        radio_name = f"pj0601id_{seq}"
+        if opt_td:
+            first_radio = opt_td.find('input', type='radio')
+            if first_radio:
+                radio_name = first_radio.get('name', radio_name)
+
+        questions.append({
+            'seq': seq,
+            'radio_name': radio_name,
+            'title_text': text,
+            'options': options
+        })
+
+    print(f"\n题目 (按显示顺序, {len(questions)} 道):")
+    for i, q in enumerate(questions):
         opts = '/'.join(q['options'].keys())
-        print(f"  [{seq}] {q['title_text'][:50]}")
-        print(f"       选项: {opts}")
+        print(f"  [{i+1}] pj06xh={q['seq']} {q['title_text'][:50]}")
+        print(f"       radio={q['radio_name']} 选项: {opts}")
 
-    return hidden_fields, questions
+    return hidden_fields, questions, duplicated_fields
 
 
-def submit_evaluation(session, hidden_fields, questions, do_submit=False):
+def submit_evaluation(session, hidden_fields, questions, duplicated_fields, do_submit=False):
     """提交评价 (do_submit=False 则仅保存, True 则正式提交)"""
     action = "提交" if do_submit else "保存"
     print(f"\n=== Step 4: {action}评价 ===")
 
-    # 只取核心隐藏字段，跳过选项值字段 (pj0601fz_*)
-    form_data = {}
+    # 核心字段 + pj0601fz_* 权重 + pj06xh
     core_keys = {'issubmit', 'pj09id', 'pj01id', 'pj0502id', 'jg0101id',
                  'jx0404id', 'xsflid', 'xnxq01id', 'jx02id', 'pj02id',
                  'pageIndex', 'ifypjxx', 'pj03id', 'isxtjg'}
+    form_data = {}
     for k, v in hidden_fields.items():
-        if k in core_keys:
+        if k in core_keys or k.startswith('pj0601fz_'):
             form_data[k] = v
+    # 加上所有重复字段 (pj06xh 等)
+    for k, v in duplicated_fields:
+        form_data[k] = v
 
     form_data['issubmit'] = '1' if do_submit else '0'
 
-    seq_list = sorted(questions.keys(), key=int)
-    last_seq = seq_list[-1]
+    # 按显示顺序: 最后一题选满意，其余选非常满意
+    last_idx = len(questions) - 1
 
-    for seq in seq_list:
-        q = questions[seq]
-        if seq == last_seq:
+    for i, q in enumerate(questions):
+        radio_name = q['radio_name']
+        if i == last_idx:
             if '满意' in q['options']:
-                form_data[f'pj0601id_{seq}'] = q['options']['满意']
-                print(f"  pj0601id_{seq} → 满意 ({q['title_text'][:30]}...)")
+                form_data[radio_name] = q['options']['满意']
+                print(f"  {radio_name} → 满意 ({q['title_text'][:30]}...)")
             else:
-                print(f"  ⚠ [{seq}] 没有'满意'选项!")
+                print(f"  ⚠ 题目 {i+1} 没有'满意'选项!")
                 return False
         else:
             if '非常满意' in q['options']:
-                form_data[f'pj0601id_{seq}'] = q['options']['非常满意']
-                print(f"  pj0601id_{seq} → 非常满意 ({q['title_text'][:30]}...)")
+                form_data[radio_name] = q['options']['非常满意']
+                print(f"  {radio_name} → 非常满意 ({q['title_text'][:30]}...)")
             else:
-                print(f"  ⚠ [{seq}] 没有'非常满意'选项!")
+                print(f"  ⚠ 题目 {i+1} 没有'非常满意'选项!")
                 return False
 
     form_data['jynr'] = ''
@@ -313,13 +352,13 @@ def main():
         return
 
     # Step 3: 获取表单
-    hidden_fields, questions = fetch_evaluation_form(session, target['url'])
+    hidden_fields, questions, duplicated_fields = fetch_evaluation_form(session, target['url'])
     if not questions:
         print("未解析到题目")
         return
 
     # Step 4: 提交
-    success = submit_evaluation(session, hidden_fields, questions, do_submit=False)
+    success = submit_evaluation(session, hidden_fields, questions, duplicated_fields, do_submit=False)
     if success:
         print("\n" + "=" * 60)
         print("✓ 流程已验证")
