@@ -145,3 +145,17 @@ cd frontend && npm install && npm run tauri build
 
 ### Tauri shell (frontend/src-tauri/)
 - tauri 2.10, tauri-plugin-shell 2.0, tauri-plugin-log 2
+
+## Agent skills
+
+### Issue tracker
+
+Issues tracked on GitHub at `shiyanYX/NSMC-Assistant`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.
