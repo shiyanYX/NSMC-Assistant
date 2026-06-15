@@ -190,13 +190,21 @@ def fetch_evaluation_form(session, edit_url):
     return hidden_fields, questions
 
 
-def submit_evaluation(session, hidden_fields, questions):
-    """Step 4: 提交评价"""
-    print(f"\n=== Step 4: 提交评价 ===")
+def submit_evaluation(session, hidden_fields, questions, do_submit=False):
+    """提交评价 (do_submit=False 则仅保存, True 则正式提交)"""
+    action = "提交" if do_submit else "保存"
+    print(f"\n=== Step 4: {action}评价 ===")
+
+    # 只取核心隐藏字段，跳过选项值字段 (pj0601fz_*)
     form_data = {}
+    core_keys = {'issubmit', 'pj09id', 'pj01id', 'pj0502id', 'jg0101id',
+                 'jx0404id', 'xsflid', 'xnxq01id', 'jx02id', 'pj02id',
+                 'pageIndex', 'ifypjxx', 'pj03id', 'isxtjg'}
     for k, v in hidden_fields.items():
-        form_data[k] = v
-    form_data['issubmit'] = '1'
+        if k in core_keys:
+            form_data[k] = v
+
+    form_data['issubmit'] = '1' if do_submit else '0'
 
     seq_list = sorted(questions.keys(), key=int)
     last_seq = seq_list[-1]
@@ -206,19 +214,27 @@ def submit_evaluation(session, hidden_fields, questions):
         if seq == last_seq:
             if '满意' in q['options']:
                 form_data[f'pj0601id_{seq}'] = q['options']['满意']
-                print(f"  [{seq}] → 满意")
+                print(f"  pj0601id_{seq} → 满意 ({q['title_text'][:30]}...)")
             else:
                 print(f"  ⚠ [{seq}] 没有'满意'选项!")
                 return False
         else:
             if '非常满意' in q['options']:
                 form_data[f'pj0601id_{seq}'] = q['options']['非常满意']
+                print(f"  pj0601id_{seq} → 非常满意 ({q['title_text'][:30]}...)")
             else:
                 print(f"  ⚠ [{seq}] 没有'非常满意'选项!")
                 return False
 
     form_data['jynr'] = ''
-    print(f"提交 {len(form_data)} 个字段...")
+
+    # 打印所有选中项供审核
+    check_keys = [k for k in form_data if k.startswith('pj0601id_')]
+    print(f"\n=== 审核: 共 {len(check_keys)} 道题 ===")
+    for k in sorted(check_keys, key=lambda x: int(x.replace('pj0601id_', ''))):
+        print(f"  {k} = {form_data[k]}")
+
+    print(f"\n(action={action})")
 
     resp = session.post(XSPJ_SAVE_URL, data=form_data, verify=False, timeout=10)
     print(f"状态码: {resp.status_code}")
@@ -287,7 +303,7 @@ def main():
         return
 
     # Step 4: 提交
-    success = submit_evaluation(session, hidden_fields, questions)
+    success = submit_evaluation(session, hidden_fields, questions, do_submit=False)
     if success:
         print("\n" + "=" * 60)
         print("✓ 流程已验证")
