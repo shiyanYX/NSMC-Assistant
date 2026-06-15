@@ -324,46 +324,64 @@ def main():
         print("未找到评价批次")
         return
 
-    # 选第一个批次
     target_batch = batches[0]
     print(f"\n→ 进入批次: {target_batch['batch']}")
 
     # Step 2: 获取教师列表
     teachers = get_teacher_list(session, target_batch['url'])
     if not teachers:
-        print("未找到待评教师（可能已全部评完或解析失败）")
+        print("未找到待评教师")
         return
 
-    # 找第一个未提交的
     unsubmitted = [t for t in teachers if t['submitted'] != '是']
     if not unsubmitted:
         print("\n🎉 全部已评完!")
         return
 
-    target = unsubmitted[0]
-    print(f"\n→ 目标: {target['teacher_name']} ({target['dept']}) [{target['seq']}/{len(teachers)}]")
-    print(f"   剩余未评: {len(unsubmitted)} 位教师")
+    print(f"\n剩余未评: {len(unsubmitted)} 位")
 
-    confirm = input("\n按 Enter 提交, s 跳过: ").strip()
-    if confirm.lower() == 's':
-        print("跳过。")
+    # === 选择模式 ===
+    print("\n模式:")
+    print("  a = 连续保存 2 个 (issubmit=0)")
+    print("  b = 连续提交 2 个 (issubmit=1)")
+    mode = input("选 a/b: ").strip().lower()
+
+    if mode not in ('a', 'b'):
+        print("无效选择，退出")
         return
 
-    # Step 3: 获取表单
-    hidden_fields, questions, duplicated_fields = fetch_evaluation_form(session, target['url'])
-    if not questions:
-        print("未解析到题目")
-        return
+    do_submit = (mode == 'b')
+    count = min(2, len(unsubmitted))
 
-    # Step 4: 提交
-    success = submit_evaluation(session, hidden_fields, questions, duplicated_fields, do_submit=False)
-    if success:
-        print("\n" + "=" * 60)
-        print("✓ 流程已验证")
-        print("=" * 60)
-    else:
-        print("\n✗ 验证失败")
+    print(f"\n{'='*60}")
+    print(f"连续{'提交' if do_submit else '保存'} {count} 个")
+    print(f"{'='*60}")
+
+    success_count = 0
+    for i in range(count):
+        t = unsubmitted[i]
+        print(f"\n{'─'*40}")
+        print(f"[{i+1}/{count}] {t['teacher_name']} ({t['dept']})")
+        print(f"{'─'*40}")
+
+        hidden_fields, questions, duplicated_fields = fetch_evaluation_form(session, t['url'])
+        if not questions:
+            print(f"  ✗ 跳过: 未解析到题目")
+            continue
+
+        ok = submit_evaluation(session, hidden_fields, questions, duplicated_fields, do_submit=do_submit)
+        if ok:
+            success_count += 1
+            # 小延迟，避免请求太快
+            time.sleep(0.5)
+        else:
+            print(f"  ✗ 失败!")
+
+    print(f"\n{'='*60}")
+    print(f"完成: {success_count}/{count} {'提交' if do_submit else '保存'}成功")
+    print(f"{'='*60}")
 
 
 if __name__ == '__main__':
+    import time
     main()
