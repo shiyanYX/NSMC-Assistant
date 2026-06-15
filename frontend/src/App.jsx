@@ -8,7 +8,10 @@ import {
   CardFooter,
   Text,
   makeStyles,
-  tokens
+  tokens,
+  FluentProvider,
+  webLightTheme,
+  webDarkTheme
 } from '@fluentui/react-components';
 import ScoreQuery from './components/ScoreQuery';
 import EvaluationQuery from './components/EvaluationQuery';
@@ -272,7 +275,10 @@ function App() {
   }
 
   // Main app
+  const theme = dark ? webDarkTheme : webLightTheme;
+
   return (
+    <FluentProvider theme={theme}>
     <div className={styles.appContainer}>
       <header className={styles.appHeader}>
         <div className={styles.headerLeft}>
@@ -316,6 +322,7 @@ function App() {
         </div>
       </div>
     </div>
+    </FluentProvider>
   );
 }
 
