@@ -12,10 +12,10 @@ import {
   TableRow,
   Tag,
   Spinner,
+  Dropdown,
   makeStyles,
   tokens
 } from '@fluentui/react-components';
-import { Dropdown, DropdownMenuItemType } from '@fluentui/react';
 
 const useStyles = makeStyles({
   scoreQueryCard: {
@@ -257,22 +257,17 @@ function ScoreQuery({ account }) {
             <Text variant="small" weight="medium" className={styles.filterLabel}>学期筛选</Text>
             <Dropdown
               placeholder="选择学期"
-              selectedKey={selectedTerm}
-              onChange={(event, option) => {
-                if (option) {
-                  setSelectedTerm(option.key);
-                }
+              value={selectedTerm === 'all' ? '全部学期' : selectedTerm}
+              onOptionSelect={(event, data) => {
+                setSelectedTerm(data.optionValue || 'all');
               }}
-              options={terms.map((term) => ({
-                key: term,
-                text: term === 'all' ? '全部学期' : term
-              }))}
-              styles={{
-                dropdown: {
-                  width: '180px'
-                }
-              }}
-            />
+            >
+              {terms.map((term) => (
+                <option key={term} value={term}>
+                  {term === 'all' ? '全部学期' : term}
+                </option>
+              ))}
+            </Dropdown>
             <Button
               variant="outline"
               size="small"
