@@ -169,6 +169,12 @@ function EvaluationQuery({ account }) {
         const data = await response.json();
         if (data.success) {
           ok++;
+          // 立即更新列表中该行状态
+          setTeachers(prev => prev.map(teacher =>
+            teacher.teacher_id === t.teacher_id && teacher.url === t.url
+              ? { ...teacher, submitted: '是' }
+              : teacher
+          ));
         } else {
           fail++;
           console.error(`评教失败: ${t.teacher_name} - ${data.message}`);
@@ -185,8 +191,6 @@ function EvaluationQuery({ account }) {
     if (fail === 0) {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 5000);
-      // 刷新列表
-      fetchTeachers();
     } else {
       setError(`${ok} 位提交成功, ${fail} 位失败`);
     }

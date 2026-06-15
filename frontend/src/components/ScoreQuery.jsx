@@ -205,7 +205,11 @@ function ScoreQuery({ account }) {
     <div style={{ padding: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <Text variant="large" weight="semibold">成绩查询</Text>
-        <Button
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <Text variant="small" color="secondary">
+            💡 如无法获取成绩，请先完成"教学评价"
+          </Text>
+          <Button
             variant="primary"
             disabled={loading}
             onClick={fetchScores}
@@ -213,6 +217,7 @@ function ScoreQuery({ account }) {
           >
             {loading ? '获取中...' : '获取成绩'}
           </Button>
+        </div>
       </div>
         {showSuccess && (
           <div className={styles.successAlert}>
