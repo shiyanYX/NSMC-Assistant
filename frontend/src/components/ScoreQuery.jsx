@@ -4,6 +4,12 @@ import {
   Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow
 } from '@fluentui/react-components';
 
+const SCORE_MODES = [
+  { value: 'all', label: '显示全部成绩' },
+  { value: 'best', label: '显示最好成绩' },
+];
+const ATTR_OPTIONS = ['全部', '必修', '限选', '任选', '公选'];
+
 function ScoreQuery({ account }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -12,6 +18,11 @@ function ScoreQuery({ account }) {
   const [terms, setTerms] = useState(['all']);
   const [selectedTerm, setSelectedTerm] = useState('all');
   const [showFullData, setShowFullData] = useState(false);
+
+  // 新筛选
+  const [attrFilter, setAttrFilter] = useState('全部');
+  const [scoreMode, setScoreMode] = useState('all');
+  const [showRetake, setShowRetake] = useState(true);
 
   const fetchScores = async () => {
     if (!account?.username || !account?.password) { setError('账号信息不完整'); return; }
@@ -33,17 +44,65 @@ function ScoreQuery({ account }) {
       }));
       setScores(ts);
       const tset = new Set(ts.map(s => s.term));
-      setTerms(['all', ...Array.from(tset).sort().reverse()]);
+      const sortedTerms = Array.from(tset).sort().reverse();
+      setTerms(['all', ...sortedTerms]);
+      // 默认选中最近学期
+      if (sortedTerms.length > 0) {
+        setSelectedTerm(sortedTerms[0]);
+      }
       setShowSuccess(true); setTimeout(() => setShowSuccess(false), 3000);
     } catch (err) { setError(`获取成绩失败: ${err.message || '网络错误'}`); }
     finally { setLoading(false); }
   };
 
-  const filtered = selectedTerm === 'all' ? scores : scores.filter(s => s.term === selectedTerm);
+  // --- 筛选管道 ---
+  let filtered = scores;
+
+  // 1. 学期
+  if (selectedTerm !== 'all') {
+    filtered = filtered.filter(s => s.term === selectedTerm);
+  }
+
+  // 2. 课程属性
+  if (attrFilter !== '全部') {
+    filtered = filtered.filter(s => s.attribute === attrFilter);
+  }
+
+  // 3. 补重成绩
+  if (!showRetake) {
+    filtered = filtered.filter(s => {
+      const n = s.nature || '';
+      return !n.includes('补考') && !n.includes('重修') && !n.includes('补');
+    });
+  }
+
+  // 4. 显示方式（最好成绩 → 按课程编号去重保留最高分）
+  if (scoreMode === 'best') {
+    const bestMap = {};
+    filtered.forEach(s => {
+      const key = s.courseCode || s.courseName;
+      if (!key) return;
+      const scoreNum = parseFloat(s.score) || 0;
+      if (!bestMap[key] || scoreNum > (parseFloat(bestMap[key].score) || 0)) {
+        bestMap[key] = s;
+      }
+    });
+    filtered = Object.values(bestMap);
+  }
+
   const totalCredits = filtered.reduce((s, c) => s + c.credit, 0).toFixed(2);
   const avgGpa = () => {
     const v = filtered.filter(s => s.gpa > 0);
     return v.length === 0 ? '0.00' : (v.reduce((s, c) => s + c.gpa, 0) / v.length).toFixed(2);
+  };
+
+  // 提取属性值去重
+  const attrValues = [...new Set(scores.map(s => s.attribute).filter(Boolean))];
+
+  const selectStyle = {
+    background: 'var(--bg-surface)', color: 'var(--text-primary)',
+    border: '1px solid var(--border-color)', padding: '2px 8px', fontSize: '12px',
+    height: '24px', outline: 'none', cursor: 'pointer', borderRadius: '2px'
   };
 
   return (
@@ -79,16 +138,33 @@ function ScoreQuery({ account }) {
       )}
 
       {scores.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '600', whiteSpace: 'nowrap' }}>学期</span>
-          <select value={selectedTerm} onChange={e => setSelectedTerm(e.target.value)}
-            style={{
-              background: 'var(--bg-surface)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-color)', padding: '2px 8px', fontSize: '12px',
-              height: '24px', outline: 'none', cursor: 'pointer', borderRadius: '2px'
-            }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+          {/* 学期 */}
+          <label style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '600', whiteSpace: 'nowrap' }}>学期</label>
+          <select value={selectedTerm} onChange={e => setSelectedTerm(e.target.value)} style={selectStyle}>
             {terms.map(t => <option key={t} value={t}>{t === 'all' ? '全部学期' : t}</option>)}
           </select>
+
+          {/* 课程属性 */}
+          <label style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '600', whiteSpace: 'nowrap' }}>课程属性</label>
+          <select value={attrFilter} onChange={e => setAttrFilter(e.target.value)} style={selectStyle}>
+            {ATTR_OPTIONS.map(a => (
+              <option key={a} value={a} disabled={a !== '全部' && !attrValues.includes(a)}>{a}</option>
+            ))}
+          </select>
+
+          {/* 显示方式 */}
+          <label style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '600', whiteSpace: 'nowrap' }}>显示方式</label>
+          <select value={scoreMode} onChange={e => setScoreMode(e.target.value)} style={selectStyle}>
+            {SCORE_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+
+          {/* 补重成绩 */}
+          <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showRetake} onChange={e => setShowRetake(e.target.checked)} />
+            显示补考/重修
+          </label>
+
           <Button appearance="outline" size="small" onClick={() => setShowFullData(!showFullData)}>
             {showFullData ? '隐藏完整数据' : '显示完整数据'}
           </Button>
@@ -100,7 +176,8 @@ function ScoreQuery({ account }) {
           <Table>
             <TableHeader>
               <TableRow>
-                {[['#', '30px'], ['学期', ''], ['课程编号', ''], ['课程名称', ''], ['成绩', '50px'], ['学分', '40px'],
+                {[
+                  ['#', '30px'], ['学期', ''], ['课程编号', ''], ['课程名称', ''], ['成绩', '50px'], ['学分', '40px'],
                   ...(showFullData ? [['学时', '50px']] : []), ['绩点', '50px'],
                   ...(showFullData ? [['考核方式', ''], ['课程属性', '']] : []), ['考试性质', '']
                 ].map(([label, w]) => (
@@ -118,19 +195,21 @@ function ScoreQuery({ account }) {
                   background: i % 2 === 0 ? 'var(--bg-table-row-even)' : 'var(--bg-table-row-odd)',
                   borderBottom: '1px solid var(--border-color)'
                 }}>
-                  <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap', width: '30px' }}>{s.id}</TableCell>
+                  <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap', width: '30px' }}>{i + 1}</TableCell>
                   <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-primary)' }}>{s.term}</TableCell>
                   <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-primary)' }}>{s.courseCode}</TableCell>
                   <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-primary)' }}>{s.courseName}</TableCell>
                   <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap', width: '50px' }}>
-                    <ScoreBadge score={s.score} />
+                    <ScoreBadge score={s.score} nature={s.nature} />
                   </TableCell>
                   <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap', width: '40px' }}>{s.credit}</TableCell>
                   {showFullData && <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap', width: '50px' }}>{s.hours}</TableCell>}
                   <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap', width: '50px' }}>{s.gpa}</TableCell>
                   {showFullData && <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-primary)' }}>{s.assessment}</TableCell>}
                   {showFullData && <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-primary)' }}>{s.attribute}</TableCell>}
-                  <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-primary)' }}>{s.nature}</TableCell>
+                  <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-primary)' }}>
+                    <NatureBadge nature={s.nature} />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -154,7 +233,8 @@ function ScoreQuery({ account }) {
   );
 }
 
-function ScoreBadge({ score }) {
+function ScoreBadge({ score, nature }) {
+  const isRetake = nature && (nature.includes('补考') || nature.includes('重修') || nature.includes('补'));
   const num = typeof score === 'string' ? parseFloat(score) : score;
   let bg, color;
   if (isNaN(num)) { bg = 'var(--bg-badge-pass)'; color = 'var(--text-primary)'; }
@@ -163,7 +243,28 @@ function ScoreBadge({ score }) {
   else if (num >= 60) { bg = 'var(--bg-badge-pass)'; color = 'var(--text-badge-pass)'; }
   else { bg = 'var(--bg-badge-fail)'; color = 'var(--text-badge-fail)'; }
 
-  return <span style={{ display: 'inline-block', padding: '0 8px', height: '20px', lineHeight: '20px', fontSize: '11px', fontWeight: '600', borderRadius: '3px', background: bg, color }}>{score}</span>;
+  return (
+    <span style={{
+      display: 'inline-block', padding: '0 8px', height: '20px', lineHeight: '20px',
+      fontSize: '11px', fontWeight: '600', borderRadius: '3px',
+      background: isRetake ? '#e65100' : bg,
+      color: isRetake ? '#fff' : color,
+      fontStyle: isRetake ? 'italic' : 'normal'
+    }}>{score}</span>
+  );
+}
+
+function NatureBadge({ nature }) {
+  if (!nature || nature === '正常') return <span style={{ color: 'var(--text-primary)' }}>{nature || '正常'}</span>;
+  const isBad = nature.includes('补考') || nature.includes('重修') || nature.includes('补');
+  return (
+    <span style={{
+      display: 'inline-block', padding: '0 6px', height: '18px', lineHeight: '18px',
+      fontSize: '11px', fontWeight: '600', borderRadius: '3px',
+      background: isBad ? '#e65100' : 'var(--bg-badge-pass)',
+      color: isBad ? '#fff' : 'var(--text-primary)'
+    }}>{nature}</span>
+  );
 }
 
 export default ScoreQuery;
