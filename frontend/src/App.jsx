@@ -29,7 +29,6 @@ if (isTauri) {
 }
 
 const useStyles = makeStyles({
-  // ---- Login ----
   loginContainer: {
     minHeight: '100vh',
     display: 'flex',
@@ -44,90 +43,52 @@ const useStyles = makeStyles({
     backgroundColor: '#1e1e1e',
     boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
   },
-  loginForm: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px'
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px'
-  },
-  rememberMe: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: '8px',
-    marginTop: '-8px'
-  },
-  errorMessage: {
-    marginTop: '-8px',
-    marginBottom: '8px',
-    color: tokens.colorPaletteRedForeground1
-  },
-  loginButton: {
-    width: '100%',
-    marginTop: '4px'
-  },
+  loginForm: { display: 'flex', flexDirection: 'column', gap: '20px' },
+  formGroup: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  rememberMe: { flexDirection: 'row', alignItems: 'center', gap: '8px', marginTop: '-8px' },
+  errorMessage: { marginTop: '-8px', marginBottom: '8px', color: tokens.colorPaletteRedForeground1 },
+  loginButton: { width: '100%', marginTop: '4px' },
 
-  // ---- Main shell ----
   appContainer: {
     minHeight: '100vh',
-    backgroundColor: '#1e1e1e',
+    backgroundColor: 'var(--bg-app)',
     display: 'flex',
     flexDirection: 'column'
   },
-  appLayout: {
-    display: 'flex',
-    flex: 1,
-    minHeight: 0
-  },
+  appLayout: { display: 'flex', flex: 1, minHeight: 0 },
 
-  // ---- Top bar (Task Manager style) ----
   appHeader: {
     height: '32px',
-    background: '#2d2d2d',
-    borderBottom: '1px solid #3d3d3d',
+    background: 'var(--bg-header)',
+    borderBottom: '1px solid var(--border-color)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '0 12px',
-    userSelect: 'none',
-    WebkitAppRegion: 'drag'
+    userSelect: 'none'
   },
-  headerLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px'
-  },
-  appIcon: {
-    fontSize: '12px',
-    color: '#0078d4'
-  },
-  headerTitle: {
-    color: '#e0e0e0'
-  },
-  headerRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-  userInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px'
-  },
-  userName: {
-    color: '#a0a0a0'
+  headerLeft: { display: 'flex', alignItems: 'center', gap: '6px' },
+  appIcon: { fontSize: '12px', color: '#0078d4' },
+  headerTitle: { color: 'var(--text-primary)' },
+  headerRight: { display: 'flex', alignItems: 'center', gap: '8px' },
+  userInfo: { display: 'flex', alignItems: 'center', gap: '6px' },
+  userName: { color: 'var(--text-secondary)' },
+  themeBtn: {
+    color: 'var(--text-primary)',
+    backgroundColor: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '14px',
+    padding: '2px 6px',
+    '&:hover': { backgroundColor: 'rgba(128,128,128,0.2)', borderRadius: '3px' }
   },
 
-  // ---- Sidebar (Task Manager nav pane) ----
   sidebar: {
     width: '48px',
-    background: '#2d2d2d',
+    background: 'var(--bg-sidebar)',
     display: 'flex',
     flexDirection: 'column',
-    borderRight: '1px solid #3d3d3d',
+    borderRight: '1px solid var(--border-color)',
     flexShrink: 0
   },
   navItem: {
@@ -139,39 +100,28 @@ const useStyles = makeStyles({
     fontSize: '18px',
     borderLeft: '2px solid transparent',
     transition: 'all 0.15s',
-    '&:hover': {
-      backgroundColor: '#3a3a3a'
-    },
-    '&.active': {
-      backgroundColor: '#1e3a5f',
-      borderLeftColor: '#0078d4'
-    }
+    '&:hover': { backgroundColor: 'rgba(128,128,128,0.15)' },
+    '&.active': { backgroundColor: 'rgba(0,120,212,0.15)', borderLeftColor: '#0078d4' }
   },
 
-  // ---- Content ----
   contentArea: {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
     minWidth: 0,
-    backgroundColor: '#1e1e1e'
+    backgroundColor: 'var(--bg-app)'
   },
-  appMain: {
-    flex: 1,
-    padding: '12px',
-    overflowY: 'auto'
-  },
+  appMain: { flex: 1, padding: '12px', overflowY: 'auto' },
 
-  // ---- Footer status bar ----
   appFooter: {
     height: '24px',
-    background: '#007acc',
+    background: 'var(--bg-footer)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '0 12px',
     fontSize: '11px',
-    color: '#fff'
+    color: 'var(--text-footer)'
   }
 });
 
@@ -181,6 +131,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [dark, setDark] = useState(false);
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [rememberMe, setRememberMe] = useState(false);
@@ -191,9 +142,16 @@ function App() {
   ]);
   const [currentNav, setCurrentNav] = useState('score');
 
+  // Apply / toggle theme
+  useEffect(() => {
+    document.body.classList.toggle('theme-dark', dark);
+  }, [dark]);
+
+  // Login page always dark — restore main page theme preference on logout
+  const toggleTheme = () => setDark(d => !d);
+
   const startBackend = async () => {
     if (!isTauri || !Command) return;
-
     let retryCount = 0;
     const maxRetries = 3;
     while (retryCount < maxRetries) {
@@ -246,12 +204,8 @@ function App() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!loginForm.username || !loginForm.password) {
-      setError('请输入学号和密码');
-      return;
-    }
-    setLoading(true);
-    setError('');
+    if (!loginForm.username || !loginForm.password) { setError('请输入学号和密码'); return; }
+    setLoading(true); setError('');
     try {
       const response = await fetch('http://localhost:5000/api/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -264,24 +218,15 @@ function App() {
         localStorage.setItem('currentUser', JSON.stringify(user));
         if (rememberMe) {
           localStorage.setItem('savedLogin', JSON.stringify({ username: loginForm.username, password: loginForm.password }));
-        } else {
-          localStorage.removeItem('savedLogin');
-        }
-        setIsLoggedIn(true);
-        setError('');
-      } else {
-        setError(data.message || '登录失败，请检查学号和密码');
-      }
-    } catch (err) {
-      setError('网络错误，请稍后重试: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+        } else { localStorage.removeItem('savedLogin'); }
+        setIsLoggedIn(true); setError('');
+      } else { setError(data.message || '登录失败，请检查学号和密码'); }
+    } catch (err) { setError('网络错误，请稍后重试: ' + err.message); }
+    finally { setLoading(false); }
   };
 
   const handleLogout = () => {
-    setIsLoggedIn(false);
-    setCurrentUser(null);
+    setIsLoggedIn(false); setCurrentUser(null);
     localStorage.removeItem('currentUser');
   };
 
@@ -290,7 +235,7 @@ function App() {
     setLoginForm(prev => ({ ...prev, [name]: value }));
   };
 
-  // Login screen
+  // Login screen (always dark)
   if (!isLoggedIn) {
     return (
       <div className={styles.loginContainer}>
@@ -329,13 +274,19 @@ function App() {
   // Main app
   return (
     <div className={styles.appContainer}>
-      {/* Title bar */}
       <header className={styles.appHeader}>
         <div className={styles.headerLeft}>
           <span className={styles.appIcon}>■</span>
           <Text variant="medium" weight="semibold" className={styles.headerTitle}>川北医助手</Text>
         </div>
         <div className={styles.headerRight}>
+          <button
+            className={styles.themeBtn}
+            onClick={toggleTheme}
+            title={dark ? '切换到浅色' : '切换到深色'}
+          >
+            {dark ? '☀️' : '🌙'}
+          </button>
           <div className={styles.userInfo}>
             <Text variant="small" className={styles.userName}>{currentUser.name}</Text>
             <Button appearance="outline" size="small" onClick={handleLogout}>退出登录</Button>
@@ -344,7 +295,6 @@ function App() {
       </header>
 
       <div className={styles.appLayout}>
-        {/* Sidebar - icon only */}
         <aside className={styles.sidebar}>
           {navItems.map((item) => (
             <div key={item.id}
@@ -355,8 +305,6 @@ function App() {
             </div>
           ))}
         </aside>
-
-        {/* Content */}
         <div className={styles.contentArea}>
           <main className={styles.appMain}>
             {currentNav === 'score' && <ScoreQuery account={currentUser} />}
