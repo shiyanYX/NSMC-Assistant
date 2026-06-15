@@ -7,6 +7,7 @@ PROTOTYPE — 教学评价自动评教流程验证
 
 import requests
 import base64
+import re
 from bs4 import BeautifulSoup
 import urllib3
 import os
@@ -89,11 +90,16 @@ def get_teacher_list(session, list_url):
 
     all_teachers = []
     page = 1
+    max_pages = 20  # 安全上限
 
-    while True:
-        page_url = f"{full_url}&pageIndex={page}&isAll=1" if '?' in full_url else f"{full_url}?pageIndex={page}&isAll=1"
+    while page <= max_pages:
+        # 用 pageIndex 参数翻页
+        if 'pageIndex' in full_url:
+            page_url = re.sub(r'pageIndex=\d+', f'pageIndex={page}', full_url)
+        else:
+            sep = '&' if '?' in full_url else '?'
+            page_url = f"{full_url}{sep}pageIndex={page}"
         print(f"\n--- 第 {page} 页 ---")
-        print(f"请求: {page_url}")
         resp = session.get(page_url, verify=False, timeout=10)
 
         soup = BeautifulSoup(resp.text, 'html.parser')
