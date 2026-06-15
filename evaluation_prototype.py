@@ -247,19 +247,16 @@ def submit_evaluation(session, hidden_fields, questions, duplicated_fields, do_s
     action = "提交" if do_submit else "保存"
     print(f"\n=== Step 4: {action}评价 ===")
 
-    # 核心字段 + pj0601fz_* 权重 + pj06xh
-    core_keys = {'issubmit', 'pj09id', 'pj01id', 'pj0502id', 'jg0101id',
-                 'jx0404id', 'xsflid', 'xnxq01id', 'jx02id', 'pj02id',
-                 'pageIndex', 'ifypjxx', 'pj03id', 'isxtjg'}
-    form_data = {}
+    # 用列表，不用 dict——表单有重复字段名 (如 pj06xh 每题一个)
+    form_data = []
+    # 添加所有隐藏字段
     for k, v in hidden_fields.items():
-        if k in core_keys or k.startswith('pj0601fz_'):
-            form_data[k] = v
-    # 加上所有重复字段 (pj06xh 等)
+        form_data.append((k, v))
+    # 添加重复字段
     for k, v in duplicated_fields:
-        form_data[k] = v
+        form_data.append((k, v))
 
-    form_data['issubmit'] = '1' if do_submit else '0'
+    form_data.append(('issubmit', '1' if do_submit else '0'))
 
     # 按显示顺序: 最后一题选满意，其余选非常满意
     last_idx = len(questions) - 1
@@ -268,28 +265,29 @@ def submit_evaluation(session, hidden_fields, questions, duplicated_fields, do_s
         radio_name = q['radio_name']
         if i == last_idx:
             if '满意' in q['options']:
-                form_data[radio_name] = q['options']['满意']
+                form_data.append((radio_name, q['options']['满意']))
                 print(f"  {radio_name} → 满意 ({q['title_text'][:30]}...)")
             else:
                 print(f"  ⚠ 题目 {i+1} 没有'满意'选项!")
                 return False
         else:
             if '非常满意' in q['options']:
-                form_data[radio_name] = q['options']['非常满意']
+                form_data.append((radio_name, q['options']['非常满意']))
                 print(f"  {radio_name} → 非常满意 ({q['title_text'][:30]}...)")
             else:
                 print(f"  ⚠ 题目 {i+1} 没有'非常满意'选项!")
                 return False
 
-    form_data['jynr'] = ''
+    form_data.append(('jynr', ''))
 
     # 打印所有选中项供审核
-    check_keys = [k for k in form_data if k.startswith('pj0601id_')]
-    print(f"\n=== 审核: 共 {len(check_keys)} 道题 ===")
-    for k in sorted(check_keys, key=lambda x: int(x.replace('pj0601id_', ''))):
-        print(f"  {k} = {form_data[k]}")
+    check_items = [item for item in form_data if item[0].startswith('pj0601id_')]
+    print(f"\n=== 审核: 共 {len(check_items)} 道题 ===")
+    for k, v in sorted(check_items, key=lambda x: int(x[0].replace('pj0601id_', ''))):
+        print(f"  {k} = {v}")
 
     print(f"\n(action={action})")
+    print(f"POST {len(form_data)} 个字段...")
 
     resp = session.post(XSPJ_SAVE_URL, data=form_data, verify=False, timeout=10)
     print(f"状态码: {resp.status_code}")
