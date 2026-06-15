@@ -6,6 +6,7 @@ use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use regex::Regex;
 
 // 常量定义
 const LOGIN_URL: &str = "https://jiaowu3.nsmc.edu.cn/jsxsd/";
@@ -13,6 +14,8 @@ const LOGIN_API: &str = "https://jiaowu3.nsmc.edu.cn/jsxsd/xk/LoginToXk";
 const SCORE_QUERY_URL: &str = "https://jiaowu3.nsmc.edu.cn/jsxsd/kscj/cjcx_list";
 const SCORE_QUERY_FORM_URL: &str = "https://jiaowu3.nsmc.edu.cn/jsxsd/kscj/cjcx_query";
 const MAIN_PAGE_URL: &str = "https://jiaowu3.nsmc.edu.cn/jsxsd/framework/xsMain.jsp";
+const XSPJ_FIND_URL: &str = "https://jiaowu3.nsmc.edu.cn/jsxsd/xspj/xspj_find.do";
+const XSPJ_SAVE_URL: &str = "https://jiaowu3.nsmc.edu.cn/jsxsd/xspj/xspj_save.do";
 
 // 数据结构定义
 #[derive(Debug, Deserialize)]
@@ -59,6 +62,61 @@ struct ScoreData {
     username: String,
     name: String,
     scores: Vec<Score>,
+}
+
+// 评教数据结构
+#[derive(Debug, Deserialize)]
+struct EvaluationListRequest {
+    username: String,
+    password: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct EvaluationSubmitRequest {
+    username: String,
+    password: String,
+    teacher: TeacherInfo,
+    #[serde(rename = "do_submit")]
+    do_submit: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TeacherInfo {
+    url: String,
+    seq: Option<String>,
+    teacher_id: Option<String>,
+    teacher_name: Option<String>,
+    dept: Option<String>,
+    eval_type: Option<String>,
+    submitted: Option<String>,
+    total_score: Option<String>,
+    evaluated: Option<String>,
+    batch_name: Option<String>,
+    batch_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct EvaluationResult {
+    teacher_name: String,
+    teacher_id: String,
+    dept: String,
+    success: bool,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct EvaluationListData {
+    teachers: Vec<serde_json::Value>,
+    total: usize,
+    submitted: usize,
+    unsubmitted: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct EvaluationSubmitAllResult {
+    success: bool,
+    total: usize,
+    results: Vec<EvaluationResult>,
 }
 
 // 辅助函数：创建HTTP客户端
@@ -429,6 +487,329 @@ async fn get_score(req: web::Json<ScoreRequest>) -> impl Responder {
     HttpResponse::Ok().json(response)
 }
 
+// ==================== 教学评价 API ====================
+
+// 通用登录辅助
+async fn evaluation_login(client: &Client, username: &str, password: &str) -> bool {
+    let _ = client.get(LOGIN_URL).send().await;
+    let encoded_account = STANDARD.encode(username);
+    let encoded_password = STANDARD.encode(password);
+    let encoded = format!("{}%%%{}", encoded_account, encoded_password);
+
+    let mut form_data = HashMap::new();
+    form_data.insert("encoded", encoded);
+    form_data.insert("loginMethod", "LoginToXk".to_string());
+
+    if let Ok(resp) = client.post(LOGIN_API).form(&form_data).send().await {
+        let url = resp.url().to_string();
+        url.contains("xsMain") || url.contains("个人中心")
+    } else {
+        false
+    }
+}
+
+// 获取评价批次
+async fn get_evaluation_batches(client: &Client) -> Vec<serde_json::Value> {
+    let mut batches = Vec::new();
+    if let Ok(resp) = client.get(XSPJ_FIND_URL).send().await {
+        if let Ok(body) = resp.text().await {
+            let html = Html::parse_document(&body);
+            let table_sel = Selector::parse("table").unwrap();
+            if let Some(table) = html.select(&table_sel).next() {
+                let row_sel = Selector::parse("tr").unwrap();
+                let td_sel = Selector::parse("td").unwrap();
+                let a_sel = Selector::parse("a").unwrap();
+                for row in table.select(&row_sel).skip(1) {
+                    let cells: Vec<String> = row.select(&td_sel).map(|c| c.text().collect::<String>().trim().to_string()).collect();
+                    for a in row.select(&a_sel) {
+                        if let Some(href) = a.attr("href") {
+                            if href.contains("xspj_list.do") && cells.len() >= 8 {
+                                let mut batch = serde_json::json!({
+                                    "seq": cells[0],
+                                    "term": cells[1],
+                                    "type": cells[2],
+                                    "batch_name": cells[3],
+                                    "course_type": cells[4],
+                                    "start_time": cells[5],
+                                    "end_time": cells[6],
+                                    "url": href
+                                });
+                                batches.push(batch);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    batches
+}
+
+// 获取教师列表（自动翻页）
+async fn get_evaluation_teachers(client: &Client, list_url: &str) -> Vec<serde_json::Value> {
+    let mut all = Vec::new();
+    let mut page = 1;
+    let re = Regex::new(r"pageIndex=\d+").unwrap();
+
+    loop {
+        if page > 20 { break; }
+
+        let page_url = if re.is_match(list_url) {
+            re.replace(list_url, format!("pageIndex={}", page)).to_string()
+        } else {
+            let sep = if list_url.contains('?') { "&" } else { "?" };
+            format!("{}{}pageIndex={}", list_url, sep, page)
+        };
+
+        let resp = match client.get(&page_url).send().await {
+            Ok(r) => r,
+            Err(_) => break,
+        };
+        let body = match resp.text().await {
+            Ok(b) => b,
+            Err(_) => break,
+        };
+
+        let html = Html::parse_document(&body);
+        let table_sel = Selector::parse("table").unwrap();
+        let row_sel = Selector::parse("tr").unwrap();
+        let td_sel = Selector::parse("td").unwrap();
+        let a_sel = Selector::parse("a").unwrap();
+
+        let mut page_teachers = Vec::new();
+        let mut page_seen = std::collections::HashSet::new();
+
+        for table in html.select(&table_sel) {
+            for row in table.select(&row_sel).skip(1) {
+                let cells: Vec<String> = row.select(&td_sel).map(|c| c.text().collect::<String>().trim().to_string()).collect();
+                for a in row.select(&a_sel) {
+                    if let Some(href) = a.attr("href") {
+                        let text = a.text().collect::<String>().trim().to_string();
+                        if (href.contains("xspj_edit.do") || text == "评价" || text == "查看") && cells.len() >= 8 {
+                            let tid = &cells[1];
+                            if tid == "教师编号" || page_seen.contains(tid) { continue; }
+                            page_seen.insert(tid.clone());
+
+                            let t = serde_json::json!({
+                                "seq": cells[0],
+                                "teacher_id": tid,
+                                "teacher_name": cells[2],
+                                "dept": cells[3],
+                                "eval_type": cells[4],
+                                "total_score": cells[5],
+                                "evaluated": cells[6],
+                                "submitted": cells[7],
+                                "url": href
+                            });
+                            page_teachers.push(t);
+                        }
+                    }
+                }
+            }
+        }
+
+        if page_teachers.is_empty() {
+            break;
+        }
+        // 检查回环
+        if !all.is_empty() {
+            let first_name = page_teachers[0]["teacher_name"].as_str().unwrap_or("");
+            if all.iter().any(|t| t["teacher_name"].as_str().unwrap_or("") == first_name) {
+                break;
+            }
+        }
+
+        all.extend(page_teachers);
+        page += 1;
+    }
+
+    all
+}
+
+async fn evaluation_list(req: web::Json<EvaluationListRequest>) -> impl Responder {
+    let client = create_client();
+
+    if !evaluation_login(&client, &req.username, &req.password).await {
+        return HttpResponse::Unauthorized().json(ApiResponse {
+            success: false,
+            data: None,
+            message: "登录失败，请检查学号和密码".to_string(),
+        });
+    }
+
+    let batches = get_evaluation_batches(&client).await;
+    let mut all_teachers: Vec<serde_json::Value> = Vec::new();
+
+    for batch in &batches {
+        let url = batch["url"].as_str().unwrap_or("");
+        let teachers = get_evaluation_teachers(&client, url).await;
+        for t in teachers {
+            all_teachers.push(t);
+        }
+    }
+
+    let total = all_teachers.len();
+    let submitted = all_teachers.iter().filter(|t| t["submitted"].as_str().unwrap_or("") == "是").count();
+    let unsubmitted = total - submitted;
+
+    let data = EvaluationListData {
+        teachers: all_teachers,
+        total,
+        submitted,
+        unsubmitted,
+    };
+
+    HttpResponse::Ok().json(ApiResponse {
+        success: true,
+        data: Some(serde_json::to_value(data).unwrap()),
+        message: "获取成功".to_string(),
+    })
+}
+
+async fn evaluation_submit(req: web::Json<EvaluationSubmitRequest>) -> impl Responder {
+    let client = create_client();
+
+    if !evaluation_login(&client, &req.username, &req.password).await {
+        return HttpResponse::Unauthorized().json(ApiResponse {
+            success: false,
+            data: None,
+            message: "登录失败".to_string(),
+        });
+    }
+
+    let url = &req.teacher.url;
+    let full_url = if url.starts_with("http") { url.clone() } else { format!("https://jiaowu3.nsmc.edu.cn{}", url) };
+
+    let resp = match client.get(&full_url).send().await {
+        Ok(r) => r,
+        Err(e) => return HttpResponse::InternalServerError().json(ApiResponse {
+            success: false, data: None, message: format!("获取表单失败: {}", e),
+        }),
+    };
+    let body = match resp.text().await {
+        Ok(b) => b,
+        Err(e) => return HttpResponse::InternalServerError().json(ApiResponse {
+            success: false, data: None, message: format!("读取表单失败: {}", e),
+        }),
+    };
+
+    let html = Html::parse_document(&body);
+    let input_sel = Selector::parse("input[type='hidden']").unwrap();
+
+    let mut form_data: Vec<(String, String)> = Vec::new();
+    let mut seen_names = std::collections::HashSet::new();
+
+    for input in html.select(&input_sel) {
+        if let (Some(name), Some(value)) = (input.attr("name"), input.attr("value")) {
+            let name = name.to_string();
+            let value = value.to_string();
+            if seen_names.contains(&name) {
+                form_data.push((name, value));
+            } else {
+                seen_names.insert(name.clone());
+                form_data.push((name, value));
+            }
+        }
+    }
+
+    // 设置 issubmit
+    let do_submit = req.do_submit.unwrap_or(false);
+    form_data.retain(|(k, _)| k != "issubmit");
+    form_data.push(("issubmit".to_string(), if do_submit { "1".to_string() } else { "0".to_string() }));
+
+    // 解析题目并按显示顺序选答案
+    let table_sel = Selector::parse("table#table1").unwrap();
+    let row_sel = Selector::parse("tr").unwrap();
+    let td_sel = Selector::parse("td").unwrap();
+    let radio_sel = Selector::parse("input[type='radio']").unwrap();
+
+    let mut questions: Vec<(String, String, HashMap<String, String>)> = Vec::new(); // (radio_name, title, options)
+
+    let target_table = html.select(&table_sel).next();
+
+    if let Some(table) = target_table {
+        for row in table.select(&row_sel) {
+            let tds: Vec<_> = row.select(&td_sel).collect();
+            if tds.is_empty() { continue; }
+
+            let pj06xh = tds[0].select(&Selector::parse("input[name='pj06xh']").unwrap()).next();
+            if pj06xh.is_none() { continue; }
+
+            let seq = pj06xh.unwrap().attr("value").unwrap_or("");
+            let text = tds[0].text().collect::<String>().trim().to_string();
+            let text = text.replace(seq, "").trim().to_string();
+
+            let opt_td = tds.iter().find(|td| td.attr("name") == Some("zbtd"));
+            let mut options = HashMap::new();
+            let mut radio_name = format!("pj0601id_{}", seq);
+
+            if let Some(otd) = opt_td {
+                if let Some(first_radio) = otd.select(&radio_sel).next() {
+                    if let Some(rn) = first_radio.attr("name") {
+                        radio_name = rn.to_string();
+                    }
+                }
+                for radio in otd.select(&radio_sel) {
+                    if let (Some(title), Some(value)) = (radio.attr("title"), radio.attr("value")) {
+                        options.insert(title.to_string(), value.to_string());
+                    }
+                }
+            }
+
+            questions.push((radio_name, text, options));
+        }
+    }
+
+    if questions.is_empty() {
+        return HttpResponse::BadRequest().json(ApiResponse {
+            success: false, data: None, message: "未解析到评价题目".to_string(),
+        });
+    }
+
+    let last_idx = questions.len() - 1;
+    for (i, (radio_name, _text, options)) in questions.iter().enumerate() {
+        if i == last_idx {
+            if let Some(val) = options.get("满意") {
+                form_data.push((radio_name.clone(), val.clone()));
+            } else {
+                return HttpResponse::BadRequest().json(ApiResponse {
+                    success: false, data: None, message: "缺少'满意'选项".to_string(),
+                });
+            }
+        } else {
+            if let Some(val) = options.get("非常满意") {
+                form_data.push((radio_name.clone(), val.clone()));
+            } else {
+                return HttpResponse::BadRequest().json(ApiResponse {
+                    success: false, data: None, message: "缺少'非常满意'选项".to_string(),
+                });
+            }
+        }
+    }
+    form_data.push(("jynr".to_string(), "".to_string()));
+
+    let save_resp = match client.post(XSPJ_SAVE_URL).form(&form_data).send().await {
+        Ok(r) => r,
+        Err(e) => return HttpResponse::InternalServerError().json(ApiResponse {
+            success: false, data: None, message: format!("提交失败: {}", e),
+        }),
+    };
+    let save_text = match save_resp.text().await {
+        Ok(t) => t,
+        Err(_) => "".to_string(),
+    };
+
+    let success = save_text.contains("保存成功") || save_text.contains("提交成功") || save_text.contains("成功");
+    let msg = if success { "提交成功".to_string() } else { format!("失败: {}", &save_text[..save_text.len().min(100)]) };
+
+    HttpResponse::Ok().json(ApiResponse {
+        success,
+        data: None,
+        message: msg,
+    })
+}
+
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // 初始化日志
@@ -450,6 +831,8 @@ async fn main() -> std::io::Result<()> {
                     .allow_any_header())
                 .route("/api/login", web::post().to(login))
                 .route("/api/score", web::post().to(get_score))
+                .route("/api/evaluation/list", web::post().to(evaluation_list))
+                .route("/api/evaluation/submit", web::post().to(evaluation_submit))
         }).bind(&addr) {
             Ok(http_server) => {
                 info!("成功绑定到端口 {}", port);

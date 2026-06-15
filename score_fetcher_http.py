@@ -13,6 +13,9 @@ LOGIN_API = 'https://jiaowu3.nsmc.edu.cn/jsxsd/xk/LoginToXk'
 SCORE_QUERY_URL = 'https://jiaowu3.nsmc.edu.cn/jsxsd/kscj/cjcx_list'
 SCORE_QUERY_FORM_URL = 'https://jiaowu3.nsmc.edu.cn/jsxsd/kscj/cjcx_query'
 MAIN_PAGE_URL = 'https://jiaowu3.nsmc.edu.cn/jsxsd/framework/xsMain.jsp'
+# 评教
+XSPJ_FIND_URL = 'https://jiaowu3.nsmc.edu.cn/jsxsd/xspj/xspj_find.do'
+XSPJ_SAVE_URL = 'https://jiaowu3.nsmc.edu.cn/jsxsd/xspj/xspj_save.do'
 
 
 def get_available_terms(session):
@@ -265,3 +268,285 @@ if __name__ == '__main__':
     else:
         print(f'成功获取 {real_name} 的成绩!')
         print(df)
+
+
+# ========== 教学评价 ==========
+
+def _create_session():
+    """创建带 User-Agent 的 requests session"""
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
+    return session
+
+
+def _login_session(session, username, password):
+    """登录教务系统，成功返回 True"""
+    session.get(LOGIN_URL, verify=False, timeout=10)
+    encoded_account = encode_inp(username)
+    encoded_password = encode_inp(password)
+    encoded = f"{encoded_account}%%%{encoded_password}"
+    login_data = {'encoded': encoded, 'loginMethod': 'LoginToXk'}
+    login_response = session.post(LOGIN_API, data=login_data, verify=False, allow_redirects=True, timeout=10)
+    return 'xsMain' in login_response.text or '个人中心' in login_response.text
+
+
+def get_evaluation_batches(session):
+    """获取评价批次列表"""
+    resp = session.get(XSPJ_FIND_URL, verify=False, timeout=10)
+    soup = BeautifulSoup(resp.text, 'html.parser')
+    table = soup.find('table')
+    if not table:
+        return []
+
+    batches = []
+    rows = table.find_all('tr')[1:]
+    for row in rows:
+        cells = row.find_all('td')
+        links = row.find_all('a')
+        for a in links:
+            href = a.get('href', '')
+            if 'xspj_list.do' in href and len(cells) >= 8:
+                batches.append({
+                    'seq': cells[0].get_text(strip=True),
+                    'term': cells[1].get_text(strip=True),
+                    'type': cells[2].get_text(strip=True),
+                    'batch_name': cells[3].get_text(strip=True),
+                    'course_type': cells[4].get_text(strip=True),
+                    'start_time': cells[5].get_text(strip=True),
+                    'end_time': cells[6].get_text(strip=True),
+                    'url': href
+                })
+    return batches
+
+
+def get_evaluation_teachers(session, list_url):
+    """获取指定批次下所有待评教师（自动翻页）"""
+    if not list_url.startswith('http'):
+        list_url = f'https://jiaowu3.nsmc.edu.cn{list_url}'
+
+    all_teachers = []
+    seen_names = set()
+    page = 1
+
+    while page <= 20:
+        page_url = re.sub(r'pageIndex=\d+', f'pageIndex={page}', list_url)
+        if 'pageIndex' not in page_url:
+            sep = '&' if '?' in page_url else '?'
+            page_url = f'{page_url}{sep}pageIndex={page}'
+
+        resp = session.get(page_url, verify=False, timeout=10)
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        tables = soup.find_all('table')
+
+        teachers_on_page = []
+        seen_on_page = set()
+
+        for table in tables:
+            for row in table.find_all('tr')[1:]:
+                cells = row.find_all('td')
+                links = row.find_all('a')
+                for a in links:
+                    href = a.get('href', '')
+                    text = a.get_text(strip=True)
+                    if ('xspj_edit.do' in href or text in ('评价', '查看')) and len(cells) >= 8:
+                        tid = cells[1].get_text(strip=True)
+                        if tid == '教师编号' or tid in seen_on_page:
+                            continue
+                        seen_on_page.add(tid)
+                        teachers_on_page.append({
+                            'seq': cells[0].get_text(strip=True),
+                            'teacher_id': tid,
+                            'teacher_name': cells[2].get_text(strip=True),
+                            'dept': cells[3].get_text(strip=True),
+                            'eval_type': cells[4].get_text(strip=True),
+                            'total_score': cells[5].get_text(strip=True),
+                            'evaluated': cells[6].get_text(strip=True),
+                            'submitted': cells[7].get_text(strip=True),
+                            'url': href
+                        })
+
+        if not teachers_on_page or teachers_on_page[0]['teacher_name'] in seen_names:
+            break
+
+        for t in teachers_on_page:
+            seen_names.add(t['teacher_name'])
+        all_teachers.extend(teachers_on_page)
+        page += 1
+
+    return all_teachers
+
+
+def _parse_evaluation_form(session, edit_url):
+    """解析评价表单，返回 (hidden_fields, questions_list, duplicated_fields)"""
+    if not edit_url.startswith('http'):
+        edit_url = f'https://jiaowu3.nsmc.edu.cn{edit_url}'
+
+    resp = session.get(edit_url, verify=False, timeout=10)
+    soup = BeautifulSoup(resp.text, 'html.parser')
+
+    hidden_fields = {}
+    duplicated_fields = []
+
+    for hidden in soup.find_all('input', type='hidden'):
+        name = hidden.get('name')
+        value = hidden.get('value', '')
+        if not name:
+            continue
+        if name in hidden_fields:
+            duplicated_fields.append((name, value))
+        else:
+            hidden_fields[name] = value
+
+    questions = []
+    form_table = soup.find('table', id='table1')
+    if not form_table:
+        form_table = soup.find('table')
+
+    if form_table:
+        for tr in form_table.find_all('tr'):
+            td = tr.find('td')
+            if not td:
+                continue
+            pj06xh_input = td.find('input', attrs={'name': 'pj06xh'})
+            if not pj06xh_input:
+                continue
+            seq = pj06xh_input.get('value', '')
+            text = td.get_text(strip=True)
+            text = text.replace(seq, '').strip()
+
+            opt_td = tr.find('td', attrs={'name': 'zbtd'})
+            options = {}
+            radio_name = f'pj0601id_{seq}'
+            if opt_td:
+                first_radio = opt_td.find('input', type='radio')
+                if first_radio:
+                    radio_name = first_radio.get('name', radio_name)
+                for radio in opt_td.find_all('input', type='radio'):
+                    opt_title = radio.get('title', '')
+                    opt_value = radio.get('value', '')
+                    if opt_title and opt_value:
+                        options[opt_title] = opt_value
+
+            questions.append({
+                'seq': seq,
+                'radio_name': radio_name,
+                'title_text': text,
+                'options': options
+            })
+
+    return hidden_fields, questions, duplicated_fields
+
+
+def submit_single_evaluation(session, hidden_fields, questions, duplicated_fields, do_submit=False):
+    """提交单份评价，成功返回 (True, message)，失败返回 (False, message)"""
+    # 用列表保证重复字段名都发送
+    form_data = []
+    for k, v in hidden_fields.items():
+        if k != 'issubmit':
+            form_data.append((k, v))
+    for k, v in duplicated_fields:
+        if k != 'issubmit':
+            form_data.append((k, v))
+
+    form_data.append(('issubmit', '1' if do_submit else '0'))
+
+    # 按显示顺序：最后一题选满意，其余选非常满意
+    last_idx = len(questions) - 1
+    for i, q in enumerate(questions):
+        radio_name = q['radio_name']
+        if i == last_idx:
+            if '满意' in q['options']:
+                form_data.append((radio_name, q['options']['满意']))
+            else:
+                return False, f"题目 '{q['title_text'][:30]}' 缺少'满意'选项"
+        else:
+            if '非常满意' in q['options']:
+                form_data.append((radio_name, q['options']['非常满意']))
+            else:
+                return False, f"题目 '{q['title_text'][:30]}' 缺少'非常满意'选项"
+
+    form_data.append(('jynr', ''))
+
+    resp = session.post(XSPJ_SAVE_URL, data=form_data, verify=False, timeout=10)
+    resp_text = resp.text
+
+    if '保存成功' in resp_text:
+        return True, '保存成功'
+    elif '提交成功' in resp_text:
+        return True, '提交成功'
+    elif '保存失败' in resp_text or '提交失败' in resp_text:
+        # 提取失败原因
+        import re as _re
+        match = _re.search(r"alert\('([^']+)'\)", resp_text)
+        reason = match.group(1) if match else resp_text[:100]
+        return False, reason
+    return True, 'ok'
+
+
+def evaluation_login_and_get_list(username, password):
+    """登录并获取评价列表（完整流程）"""
+    session = _create_session()
+    if not _login_session(session, username, password):
+        return None, session, '登录失败，请检查学号和密码'
+
+    batches = get_evaluation_batches(session)
+    if not batches:
+        return [], session, '未找到评价批次'
+
+    all_teachers = []
+    for batch in batches:
+        teachers = get_evaluation_teachers(session, batch['url'])
+        for t in teachers:
+            t['batch_name'] = batch['batch_name']
+            t['batch_url'] = batch['url']
+        all_teachers.extend(teachers)
+
+    return all_teachers, session, None
+
+
+def evaluation_submit_one(session, teacher_info, do_submit=False):
+    """提交一位教师的评价"""
+    hidden_fields, questions, duplicated_fields = _parse_evaluation_form(session, teacher_info['url'])
+    if not questions:
+        return False, '未解析到评价题目'
+    return submit_single_evaluation(session, hidden_fields, questions, duplicated_fields, do_submit)
+
+
+def evaluation_submit_all(username, password):
+    """登录后一次性提交所有未评教师（全自动）"""
+    session = _create_session()
+    if not _login_session(session, username, password):
+        return {'success': False, 'message': '登录失败'}, session
+
+    batches = get_evaluation_batches(session)
+    if not batches:
+        return {'success': False, 'message': '未找到评价批次'}, session
+
+    results = []
+    for batch in batches:
+        teachers = get_evaluation_teachers(session, batch['url'])
+        unsubmitted = [t for t in teachers if t['submitted'] != '是']
+
+        for t in unsubmitted:
+            hidden_fields, questions, duplicated_fields = _parse_evaluation_form(session, t['url'])
+            if not questions:
+                results.append({'teacher_name': t['teacher_name'], 'success': False, 'message': '未解析到题目'})
+                continue
+
+            success, msg = submit_single_evaluation(session, hidden_fields, questions, duplicated_fields, do_submit=True)
+            results.append({
+                'teacher_name': t['teacher_name'],
+                'teacher_id': t['teacher_id'],
+                'dept': t['dept'],
+                'success': success,
+                'message': msg
+            })
+
+    all_ok = all(r['success'] for r in results)
+    return {
+        'success': all_ok,
+        'total': len(results),
+        'results': results
+    }, session

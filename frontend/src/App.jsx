@@ -11,6 +11,7 @@ import {
   tokens
 } from '@fluentui/react-components';
 import ScoreQuery from './components/ScoreQuery';
+import EvaluationQuery from './components/EvaluationQuery';
 
 // 检查是否在Tauri环境中运行
 const isTauri = typeof window !== 'undefined' && window.__TAURI__;
@@ -228,6 +229,12 @@ function App() {
       name: '成绩查询',
       icon: '📊',
       component: ScoreQuery
+    },
+    {
+      id: 'evaluation',
+      name: '教学评价',
+      icon: '🏫',
+      component: EvaluationQuery
     }
   ]);
   
@@ -638,6 +645,8 @@ function App() {
           <main className={styles.appMain}>
             {/* 成绩查询组件 */}
             {currentNav === 'score' && <ScoreQuery account={currentUser} />}
+            {/* 教学评价组件 */}
+            {currentNav === 'evaluation' && <EvaluationQuery account={currentUser} />}
           </main>
           
           <footer className={styles.appFooter}>
