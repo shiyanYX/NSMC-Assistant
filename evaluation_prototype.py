@@ -261,9 +261,15 @@ def main():
         print("未找到待评教师（可能已全部评完或解析失败）")
         return
 
-    # 只处理第一个
-    target = teachers[0]
-    print(f"\n→ 目标: {target['teacher_name']} ({target['dept']})")
+    # 找第一个未提交的
+    unsubmitted = [t for t in teachers if t['submitted'] != '是']
+    if not unsubmitted:
+        print("\n🎉 全部已评完!")
+        return
+
+    target = unsubmitted[0]
+    print(f"\n→ 目标: {target['teacher_name']} ({target['dept']}) [{target['seq']}/{len(teachers)}]")
+    print(f"   剩余未评: {len(unsubmitted)} 位教师")
 
     confirm = input("\n按 Enter 提交, s 跳过: ").strip()
     if confirm.lower() == 's':
