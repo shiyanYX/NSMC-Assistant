@@ -1,11 +1,8 @@
 """
 PROTOTYPE — 教学评价自动评教流程验证
-问题：HTTP 流程能不能走通？POST 提交后系统接受吗？
+流程: 登录 → 获取评价批次 → 进入批次获取教师列表 → 对第一个自动填写并提交
 
 用法: python evaluation_prototype.py
-交互式输入学号密码 → 获取待评列表 → 对第一门课自动填写并提交
-
-扔弃代码，验证后删除或并入正式代码。
 """
 
 import requests
@@ -16,13 +13,11 @@ import os
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-LOGIN_URL = 'https://jiaowu3.nsmc.edu.cn/jsxsd/'
-LOGIN_API = 'https://jiaowu3.nsmc.edu.cn/jsxsd/xk/LoginToXk'
-XSPJ_FIND_URL = 'https://jiaowu3.nsmc.edu.cn/jsxsd/xspj/xspj_find.do'
-XSPJ_EDIT_BASE = 'https://jiaowu3.nsmc.edu.cn'
-XSPJ_SAVE_URL = 'https://jiaowu3.nsmc.edu.cn/jsxsd/xspj/xspj_save.do'
-
-OUT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE = 'https://jiaowu3.nsmc.edu.cn'
+LOGIN_URL = f'{BASE}/jsxsd/'
+LOGIN_API = f'{BASE}/jsxsd/xk/LoginToXk'
+XSPJ_FIND_URL = f'{BASE}/jsxsd/xspj/xspj_find.do'
+XSPJ_SAVE_URL = f'{BASE}/jsxsd/xspj/xspj_save.do'
 
 
 def encode_inp(input_str):
@@ -30,77 +25,122 @@ def encode_inp(input_str):
 
 
 def login(session, username, password):
-    """登录教务系统"""
     session.get(LOGIN_URL, verify=False, timeout=10)
-
     encoded_account = encode_inp(username)
     encoded_password = encode_inp(password)
     encoded = f"{encoded_account}%%%{encoded_password}"
-
     login_data = {'encoded': encoded, 'loginMethod': 'LoginToXk'}
     login_response = session.post(LOGIN_API, data=login_data, verify=False, allow_redirects=True, timeout=10)
-
     print(f"登录响应 URL: {login_response.url}")
-
     if 'xsMain' in login_response.text or '个人中心' in login_response.text:
         print("✓ 登录成功")
         return True
     else:
         print("✗ 登录失败")
-        soup = BeautifulSoup(login_response.text, 'html.parser')
-        title = soup.find('title')
-        if title:
-            print(f"  页面标题: {title.get_text()}")
         return False
 
 
-def get_evaluation_list(session):
-    """获取待评课程列表"""
-    print("\n=== 获取待评课程列表 ===")
+def get_batches(session):
+    """Step 1: 获取评价批次列表"""
+    print("\n=== Step 1: 获取评价批次 ===")
     print(f"请求: {XSPJ_FIND_URL}")
+    resp = session.get(XSPJ_FIND_URL, verify=False, timeout=10)
+    print(f"响应 URL: {resp.url}")
 
-    response = session.get(XSPJ_FIND_URL, verify=False, timeout=10, allow_redirects=True)
-    print(f"最终响应 URL: {response.url}")
-    print(f"响应长度: {len(response.text)} 字符")
+    soup = BeautifulSoup(resp.text, 'html.parser')
+    table = soup.find('table')
+    if not table:
+        print("未找到表格!")
+        return []
 
-    # 保存到文件
-    html_path = os.path.join(OUT_DIR, 'xspj_list_page.html')
-    with open(html_path, 'w', encoding='utf-8') as f:
-        f.write(response.text)
-    print(f"已保存到: {html_path}")
+    # 找表头确定列索引
+    ths = table.find_all('th')
+    print(f"表头: {[t.get_text(strip=True)[:20] for t in ths]}")
 
-    soup = BeautifulSoup(response.text, 'html.parser')
+    batches = []
+    rows = table.find_all('tr')[1:]  # 跳过表头
+    for row in rows:
+        cells = row.find_all('td')
+        if len(cells) >= 8:
+            links = row.find_all('a')
+            for a in links:
+                href = a.get('href', '')
+                if 'xspj_list.do' in href:
+                    b = {
+                        'seq': cells[0].get_text(strip=True),
+                        'term': cells[1].get_text(strip=True),
+                        'type': cells[2].get_text(strip=True),
+                        'batch': cells[3].get_text(strip=True),
+                        'course_type': cells[4].get_text(strip=True),
+                        'start_time': cells[5].get_text(strip=True),
+                        'end_time': cells[6].get_text(strip=True),
+                        'url': href
+                    }
+                    batches.append(b)
+                    print(f"  {b['seq']}. {b['batch']} ({b['course_type']}) → {href[:80]}...")
 
-    # 直接打印所有表格结构
-    all_tables = soup.find_all('table')
-    print(f"\n找到 {len(all_tables)} 个表格")
+    return batches
 
-    for i, table in enumerate(all_tables):
+
+def get_teacher_list(session, list_url):
+    """Step 2: 进入某个批次，获取待评教师列表"""
+    full_url = BASE + list_url if list_url.startswith('/') else list_url
+    print(f"\n=== Step 2: 获取教师列表 ===")
+    print(f"请求: {full_url}")
+    resp = session.get(full_url, verify=False, timeout=10)
+    print(f"响应 URL: {resp.url}")
+
+    soup = BeautifulSoup(resp.text, 'html.parser')
+    tables = soup.find_all('table')
+    print(f"找到 {len(tables)} 个表格")
+
+    teachers = []
+
+    for table in tables:
         rows = table.find_all('tr')
-        print(f"\n--- 表格 #{i+1} ({len(rows)} 行) ---")
-        for j, row in enumerate(rows[:5]):  # 只展示前5行
-            cells = row.find_all('td')
+        # 打印每行结构
+        for i, row in enumerate(rows[:3]):
             ths = row.find_all('th')
+            tds = row.find_all('td')
             if ths:
-                print(f"  Row {j}: TH={[t.get_text(strip=True)[:40] for t in ths]}")
-            if cells:
+                print(f"  表头 Row {i}: {[t.get_text(strip=True)[:25] for t in ths]}")
+            if tds:
                 links = row.find_all('a')
-                link_info = [f"{a.get_text(strip=True)} -> {a.get('href','')[:60]}" for a in links]
-                print(f"  Row {j}: TD({len(cells)})={[c.get_text(strip=True)[:30] for c in cells]}")
-                if link_info:
-                    print(f"          LINKS: {link_info}")
+                hrefs = [f"{a.get_text(strip=True)} → {a.get('href','')[:60]}" for a in links]
+                print(f"  数据 Row {i}: TD={[c.get_text(strip=True)[:20] for c in tds]} | {hrefs if hrefs else '—'}")
 
-    return []
+    # 尝试解析
+    for table in tables:
+        rows = table.find_all('tr')
+        for row in rows[1:]:  # 跳过表头
+            cells = row.find_all('td')
+            links = row.find_all('a')
+            for a in links:
+                href = a.get('href', '')
+                text = a.get_text(strip=True)
+                if 'xspj_edit.do' in href or text == '评价':
+                    t = {
+                        'seq': cells[0].get_text(strip=True) if len(cells) > 0 else '?',
+                        'teacher_id': cells[1].get_text(strip=True) if len(cells) > 1 else '?',
+                        'teacher_name': cells[2].get_text(strip=True) if len(cells) > 2 else '?',
+                        'dept': cells[3].get_text(strip=True) if len(cells) > 3 else '?',
+                        'eval_type': cells[4].get_text(strip=True) if len(cells) > 4 else '?',
+                        'submitted': cells[6].get_text(strip=True) if len(cells) > 6 else '?',
+                        'url': href
+                    }
+                    teachers.append(t)
+                    print(f"  ✓ {t['seq']}. {t['teacher_name']} [{t['dept']}] - 已提交:{t['submitted']}")
+
+    return teachers
 
 
 def fetch_evaluation_form(session, edit_url):
-    """获取评价表单，解析题目和选项"""
-    full_url = XSPJ_EDIT_BASE + edit_url if edit_url.startswith('/') else edit_url
-    print(f"\n=== 获取评价表单 ===")
+    """Step 3: 获取评价表单"""
+    full_url = BASE + edit_url if edit_url.startswith('/') else edit_url
+    print(f"\n=== Step 3: 获取评价表单 ===")
     print(f"请求: {full_url}")
-
-    response = session.get(full_url, verify=False, timeout=10)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    resp = session.get(full_url, verify=False, timeout=10)
+    soup = BeautifulSoup(resp.text, 'html.parser')
 
     hidden_fields = {}
     for hidden in soup.find_all('input', type='hidden'):
@@ -109,20 +149,18 @@ def fetch_evaluation_form(session, edit_url):
         if name:
             hidden_fields[name] = value
 
-    print(f"\n隐藏字段 ({len(hidden_fields)} 个):")
+    print(f"隐藏字段 ({len(hidden_fields)} 个):")
     for k, v in hidden_fields.items():
         print(f"  {k} = {v}")
 
     questions = {}
     all_radios = soup.find_all('input', type='radio')
-
     for radio in all_radios:
         name = radio.get('name', '')
         if name.startswith('pj0601id_'):
             seq = name.replace('pj0601id_', '')
             title = radio.get('title', '?')
             value = radio.get('value', '')
-
             if seq not in questions:
                 questions[seq] = {'seq': seq, 'title_text': '', 'options': {}}
             questions[seq]['options'][title] = value
@@ -138,36 +176,33 @@ def fetch_evaluation_form(session, edit_url):
                 if seq in questions:
                     questions[seq]['title_text'] = text
 
-    print(f"\n题目列表 ({len(questions)} 道):")
+    print(f"\n题目 ({len(questions)} 道):")
     for seq in sorted(questions.keys(), key=int):
         q = questions[seq]
-        print(f"  [{seq}] {q['title_text']}")
-        for opt_title, opt_val in q['options'].items():
-            print(f"      {opt_title}: {opt_val}")
+        opts = '/'.join(q['options'].keys())
+        print(f"  [{seq}] {q['title_text'][:50]}")
+        print(f"       选项: {opts}")
 
     return hidden_fields, questions
 
 
 def submit_evaluation(session, hidden_fields, questions):
-    """提交一份评价"""
-    print(f"\n=== 提交评价 ===")
-
+    """Step 4: 提交评价"""
+    print(f"\n=== Step 4: 提交评价 ===")
     form_data = {}
     for k, v in hidden_fields.items():
         form_data[k] = v
-
     form_data['issubmit'] = '1'
 
     seq_list = sorted(questions.keys(), key=int)
     last_seq = seq_list[-1]
 
-    print("\n选择策略:")
     for seq in seq_list:
         q = questions[seq]
         if seq == last_seq:
             if '满意' in q['options']:
                 form_data[f'pj0601id_{seq}'] = q['options']['满意']
-                print(f"  [{seq}] {q['title_text'][:30]}... → 满意 ({q['options']['满意']})")
+                print(f"  [{seq}] → 满意")
             else:
                 print(f"  ⚠ [{seq}] 没有'满意'选项!")
                 return False
@@ -179,31 +214,27 @@ def submit_evaluation(session, hidden_fields, questions):
                 return False
 
     form_data['jynr'] = ''
+    print(f"提交 {len(form_data)} 个字段...")
 
-    print(f"\n提交 {len(form_data)} 个字段到: {XSPJ_SAVE_URL}")
+    resp = session.post(XSPJ_SAVE_URL, data=form_data, verify=False, timeout=10)
+    print(f"状态码: {resp.status_code}")
+    print(f"响应 (前 300): {resp.text[:300]}")
 
-    response = session.post(XSPJ_SAVE_URL, data=form_data, verify=False, timeout=10)
-
-    print(f"响应状态码: {response.status_code}")
-    print(f"响应 URL: {response.url}")
-    print(f"响应内容 (前 500 字符):")
-    print(response.text[:500])
-
-    if response.status_code == 200:
-        print("\n✓ 提交请求成功发送")
+    if resp.status_code == 200:
+        print("✓ 提交请求成功")
         return True
     else:
-        print(f"\n✗ 提交请求异常 (HTTP {response.status_code})")
+        print(f"✗ HTTP {resp.status_code}")
         return False
 
 
 def main():
     print("=" * 60)
-    print("PROTOTYPE — 评教自动提交流程验证")
+    print("PROTOTYPE — 教学评价自动评教验证")
     print("=" * 60)
 
-    username = input("\n请输入学号: ").strip()
-    password = input("请输入密码: ").strip()
+    username = input("\n学号: ").strip()
+    password = input("密码: ").strip()
 
     session = requests.Session()
     session.headers.update({
@@ -211,41 +242,48 @@ def main():
     })
 
     if not login(session, username, password):
-        print("\n测试终止: 登录失败")
+        print("登录失败，终止")
         return
 
-    # Step 2: 获取待评列表（调试模式）
-    evaluations = get_evaluation_list(session)
-
-    if not evaluations:
-        print("\n== 调试模式: 已保存 HTML，手动检查表结构 ==")
+    # Step 1: 获取批次
+    batches = get_batches(session)
+    if not batches:
+        print("未找到评价批次")
         return
 
-    target = evaluations[0]
-    print(f"\n准备测试第一门课:")
-    print(f"  教师: {target['teacher_name']}")
-    print(f"  院系: {target['dept']}")
-    print(f"  URL: {target['url']}")
+    # 选第一个批次
+    target_batch = batches[0]
+    print(f"\n→ 进入批次: {target_batch['batch']}")
 
-    confirm = input("\n按 Enter 继续提交, 输入 's' 跳过提交: ").strip()
+    # Step 2: 获取教师列表
+    teachers = get_teacher_list(session, target_batch['url'])
+    if not teachers:
+        print("未找到待评教师（可能已全部评完或解析失败）")
+        return
+
+    # 只处理第一个
+    target = teachers[0]
+    print(f"\n→ 目标: {target['teacher_name']} ({target['dept']})")
+
+    confirm = input("\n按 Enter 提交, s 跳过: ").strip()
     if confirm.lower() == 's':
-        print("跳过提交。")
+        print("跳过。")
         return
 
+    # Step 3: 获取表单
     hidden_fields, questions = fetch_evaluation_form(session, target['url'])
     if not questions:
-        print("\n测试终止: 未解析到题目")
+        print("未解析到题目")
         return
 
+    # Step 4: 提交
     success = submit_evaluation(session, hidden_fields, questions)
     if success:
         print("\n" + "=" * 60)
-        print("✓ 原型验证通过 — 流程可正常执行")
+        print("✓ 流程已验证")
         print("=" * 60)
     else:
-        print("\n" + "=" * 60)
-        print("✗ 原型验证失败 — 需要排查")
-        print("=" * 60)
+        print("\n✗ 验证失败")
 
 
 if __name__ == '__main__':

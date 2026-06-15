@@ -1,0 +1,126 @@
+
+  
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+	
+
+
+<head id="headerid1">
+	<base target='_self'>
+	<title>学生评价</title>
+	<meta http-equiv="pragma" content="no-cache">
+	<meta http-equiv="cache-control" content="no-cache">
+	<meta http-equiv="expires" content="0">
+	<meta http-equiv="keywords" content="湖南强智科技教务系统">
+	<meta http-equiv="description" content="湖南强智科技教务系统">
+	<meta http-equiv="X-UA-Compatible" content="IE=EmulateIE8" />
+<script type="text/javascript" src="/jsxsd/js/jquery-min.js" language="javascript" ></script>
+<script type="text/javascript" src="/jsxsd/js/common.js" language="javascript" ></script>
+<script type="text/javascript" src="/jsxsd/js/iepngfix_tilebg.js" language="javascript" ></script>
+
+<script type="text/javascript" src="/jsxsd/js/jquery.autocomplete.min.js" language="javascript" ></script>
+<script type="text/javascript" src="/jsxsd/assets/js/jquery.min.js"></script>
+<script type="text/javascript" src="/jsxsd/assets/plugins/layui/laydate.js"></script>
+<script src="/jsxsd/assets/plugins/layui/layui.all.js"></script>
+<script type="text/javascript" src="/jsxsd/assets/plugins/pagination/pagination.js" language="javascript" ></script>
+<link href="/jsxsd/framework/images/common.css" rel="stylesheet" type="text/css" />
+<link href="/jsxsd/framework/images/blue.css" rel="stylesheet" type="text/css" id="link_theme" />
+<link href="/jsxsd/framework/images/workstation.css" rel="stylesheet" type="text/css" />
+<link href="/jsxsd/css/easyui.css" rel="stylesheet" type="text/css" />
+<link href="/jsxsd/css/jquery.autocomplete.css" rel="stylesheet" type="text/css" />
+
+<link rel="stylesheet" type="text/css" href="/jsxsd/assets/css/modules/reset-table-style.css"/>
+<link rel="stylesheet" type="text/css" href="/jsxsd/assets/css/common.css"/>
+<link rel="stylesheet" type="text/css" href="/jsxsd/assets/css/ui.css"/>
+<link rel="stylesheet" type="text/css" href="/jsxsd/assets/plugins/layui/layui.css">
+<link rel="stylesheet" type="text/css" href="/jsxsd/assets/plugins/layui/laydate.css"/>
+<link rel="stylesheet" type="text/css" href="/jsxsd/assets/plugins/pagination/pagination.css"/>
+<link rel="stylesheet" type="text/css" href="/jsxsd/assets/css/modules/timetable-inquire.css" />
+<link rel="stylesheet" type="text/css" href="/jsxsd/assets/css/modules/query-condition-div.css" />
+</head>
+<iframe id="notSession" name="notSession" style="display: none;" src=""></iframe>
+<script type="text/javascript">
+jQuery(document).ready(function(){
+	window.setInterval(function(){
+		 document.getElementById("notSession").src = "/jsxsd/framework/blankPage.jsp";
+	 }, 1000 * 60 * 10);
+	
+
+});
+</script>
+
+
+<body>
+ 
+<div class="Nsb_pw">   
+	
+	
+
+
+
+
+
+
+
+ 
+	
+	<div class="Nsb_layout_r">
+	<div class="Nsb_layout_r title">学生评价</div>
+	<form action="" name="Form1" id="Form1" method="post">
+		<table width="100%" border="0" cellspacing="0" cellpadding="0" class="layui-table">
+            <tr>
+                <th width="6%" class="Nsb_r_list_thb" scope="col">序号</th>
+                <th class="Nsb_r_list_thb" scope="col">学年学期</th>
+                <th class="Nsb_r_list_thb" scope="col">评价分类</th>
+                <th class="Nsb_r_list_thb" scope="col">评价批次</th>
+				<th class="Nsb_r_list_thb" scope="col">评价课程类别</th>
+                <th class="Nsb_r_list_thb" scope="col">开始时间</th>
+                <th class="Nsb_r_list_thb" scope="col">结束时间</th>
+                <th class="Nsb_r_list_thb" scope="col">操作</th>
+            </tr>
+                                 
+            <tr>
+          		<td>1</td>
+                <td>2025-2026-2</td>
+                <td>学生评教</td>
+				<td>2025-2026-2学生评教</td>
+				<td>理论课指标</td>
+				<td>2026-06-01 00:00:00</td>
+				<td>2026-07-15 00:00:00</td>
+				<td >
+				 
+				<!--        
+				[<a href="/jsxsd/xspj/xspj_list.do?pj0502id=2BEE8F4383194E309281F685D94FFAE0&xnxq01id=2025-2026-2&pj01id=29E1196AFB3E463CAC6D0EAA7CD44DFE" title="点击进入评价">理论课指标</a>]
+	         
+				[<a href="/jsxsd/xspj/xspj_list.do?pj0502id=2BEE8F4383194E309281F685D94FFAE0&xnxq01id=2025-2026-2&pj01id=EB33092340584A18B3408CD33F026772" title="点击进入评价">实践课指标</a>]
+	 -->
+				
+	 			
+	 			
+	 			   <a href="/jsxsd/xspj/xspj_list.do?pj0502id=2BEE8F4383194E309281F685D94FFAE0&pj01id=29E1196AFB3E463CAC6D0EAA7CD44DFE&xnxq01id=2025-2026-2" title="点击进入评价">进入评价</a>
+				
+				</td>
+            </tr>
+            
+
+            
+        </table>		
+		<div class="rt edu-pagination paginationDom" style="margin-right: 22px;"></div>
+<input type="hidden" name="pageIndex" id="pageIndex" value="1"/><script type="text/javascript">  $(".paginationDom").createPage({      pageNum: 1,      current: 1,      total:1,      each:20,      backfun: function(e) {           pagination(e.current)      }});</script>	
+	</form>
+	</div>
+</div>
+ 
+<script language="javascript">
+loadjs();
+function loadjs(){
+if( ''!=''){
+alert('');
+}
+
+}
+
+
+</script>
+</body>
+</html>
