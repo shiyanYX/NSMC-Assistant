@@ -23,6 +23,7 @@ function ScoreQuery({ account }) {
   const [attrFilter, setAttrFilter] = useState('全部');
   const [scoreMode, setScoreMode] = useState('all');
   const [showRetake, setShowRetake] = useState(true);
+  const [isFetchingAll, setIsFetchingAll] = useState(false);
 
   // 加载缓存
   useEffect(() => {
@@ -42,13 +43,20 @@ function ScoreQuery({ account }) {
     } catch (_) {}
   }, [account?.username]);
 
-  const fetchScores = async () => {
+  const fetchScores = async (fetchAll) => {
     if (!account?.username || !account?.password) { setError('账号信息不完整'); return; }
     setLoading(true); setError(''); setShowSuccess(false);
+    setIsFetchingAll(!!fetchAll);
     try {
+      // 策略：如果当前选中了学期就只拉该学期（快），否则拉全部
+      // 用户也可以主动点"获取全部"
+      const term = fetchAll ? undefined : (selectedTerm !== 'all' ? selectedTerm : undefined);
       const response = await fetch('http://localhost:5000/api/score', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: account.username, password: account.password, name: account.name })
+        body: JSON.stringify({
+          username: account.username, password: account.password,
+          name: account.name, term
+        })
       });
       if (!response.ok) { setError('网络错误，请稍后重试'); return; }
       const data = await response.json();
@@ -60,19 +68,22 @@ function ScoreQuery({ account }) {
         gpa: parseFloat(s['绩点'] || 0), assessment: s['考核方式'] || '',
         nature: s['考试性质'] || '', attribute: s['课程属性'] || ''
       }));
-      setScores(ts);
-      const tset = new Set(ts.map(s => s.term));
+
+      // 合并新旧数据：用已有缓存 + 新获取的数据
+      const merged = mergeScores(scores, ts, fetchAll);
+      setScores(merged);
+      const tset = new Set(merged.map(s => s.term));
       const sortedTerms = Array.from(tset).sort().reverse();
       setTerms(['all', ...sortedTerms]);
       if (sortedTerms.length > 0) setSelectedTerm(sortedTerms[0]);
       // 保存到本地缓存
       localStorage.setItem(`scores_cache_${account.username}`, JSON.stringify({
-        scores: ts,
+        scores: merged,
         cachedAt: new Date().toISOString()
       }));
       setShowSuccess(true); setTimeout(() => setShowSuccess(false), 3000);
     } catch (err) { setError(`获取成绩失败: ${err.message || '网络错误'}`); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setIsFetchingAll(false); }
   };
 
   // --- 筛选管道 ---
@@ -131,8 +142,11 @@ function ScoreQuery({ account }) {
         <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>成绩查询</span>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>💡 如无法获取成绩，请先完成"教学评价"</span>
-          <Button appearance="primary" disabled={loading} onClick={fetchScores} size="small">
-            {loading ? '获取中...' : '获取成绩'}
+          <Button appearance="outline" size="small" disabled={loading} onClick={() => fetchScores(true)}>
+            {loading && isFetchingAll ? '获取中...' : '获取全部'}
+          </Button>
+          <Button appearance="primary" disabled={loading} onClick={() => fetchScores(false)} size="small">
+            {loading && !isFetchingAll ? '获取中...' : `获取${selectedTerm !== 'all' ? '当前学期' : '成绩'}`}
           </Button>
         </div>
       </div>
@@ -285,6 +299,17 @@ function NatureBadge({ nature }) {
       color: isBad ? '#fff' : 'var(--text-primary)'
     }}>{nature}</span>
   );
+}
+
+/** 合并新旧成绩：新数据覆盖旧数据的同课程记录，fetchAll 时完全替换 */
+function mergeScores(oldScores, newScores, replaceAll) {
+  if (replaceAll) return newScores;
+  if (!oldScores.length) return newScores;
+
+  const termSet = new Set(newScores.map(s => s.term));
+  // 保留旧数据中不属于新获取学期的课程
+  const preserved = oldScores.filter(s => !termSet.has(s.term));
+  return [...preserved, ...newScores];
 }
 
 export default ScoreQuery;
