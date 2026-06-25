@@ -613,8 +613,8 @@ async fn get_evaluation_teachers(client: &Client, list_url: &str) -> Vec<serde_j
         }
         // 检查回环
         if !all.is_empty() {
-            let first_name = page_teachers[0]["teacher_name"].as_str().unwrap_or("");
-            if all.iter().any(|t| t["teacher_name"].as_str().unwrap_or("") == first_name) {
+            let first_name = page_teachers[0]["teacher_name"].as_str().unwrap_or("").to_string();
+            if all.iter().any(|t: &serde_json::Value| t["teacher_name"].as_str().unwrap_or("") == first_name) {
                 break;
             }
         }
