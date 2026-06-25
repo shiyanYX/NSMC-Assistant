@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Button, Card, Text, Spinner, makeStyles, tokens,
   Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow
@@ -24,6 +24,24 @@ function ScoreQuery({ account }) {
   const [scoreMode, setScoreMode] = useState('all');
   const [showRetake, setShowRetake] = useState(true);
 
+  // 加载缓存
+  useEffect(() => {
+    if (!account?.username) return;
+    try {
+      const raw = localStorage.getItem(`scores_cache_${account.username}`);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached && Array.isArray(cached.scores) && cached.scores.length > 0) {
+          setScores(cached.scores);
+          const tset = new Set(cached.scores.map(s => s.term));
+          const sortedTerms = Array.from(tset).sort().reverse();
+          setTerms(['all', ...sortedTerms]);
+          if (sortedTerms.length > 0) setSelectedTerm(sortedTerms[0]);
+        }
+      }
+    } catch (_) {}
+  }, [account?.username]);
+
   const fetchScores = async () => {
     if (!account?.username || !account?.password) { setError('账号信息不完整'); return; }
     setLoading(true); setError(''); setShowSuccess(false);
@@ -46,10 +64,12 @@ function ScoreQuery({ account }) {
       const tset = new Set(ts.map(s => s.term));
       const sortedTerms = Array.from(tset).sort().reverse();
       setTerms(['all', ...sortedTerms]);
-      // 默认选中最近学期
-      if (sortedTerms.length > 0) {
-        setSelectedTerm(sortedTerms[0]);
-      }
+      if (sortedTerms.length > 0) setSelectedTerm(sortedTerms[0]);
+      // 保存到本地缓存
+      localStorage.setItem(`scores_cache_${account.username}`, JSON.stringify({
+        scores: ts,
+        cachedAt: new Date().toISOString()
+      }));
       setShowSuccess(true); setTimeout(() => setShowSuccess(false), 3000);
     } catch (err) { setError(`获取成绩失败: ${err.message || '网络错误'}`); }
     finally { setLoading(false); }
