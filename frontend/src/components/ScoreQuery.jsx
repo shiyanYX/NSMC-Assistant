@@ -33,8 +33,9 @@ function mergeScores(oldScores, newScores, replaceAll) {
   return [...preserved, ...newScores];
 }
 
-function ScoreQuery({ account }) {
+function ScoreQuery({ account, autoFetchKey }) {
   const [loading, setLoading] = useState(false);
+  const [fetchAttempted, setFetchAttempted] = useState(false);
   const [error, setError] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [scores, setScores] = useState([]);
@@ -62,6 +63,19 @@ function ScoreQuery({ account }) {
       }
     } catch (_) {}
   }, [account?.username]);
+
+  // 登录后自动获取当前学期成绩（只执行一次）
+  useEffect(() => {
+    if (account?.username && account?.password && !fetchAttempted && !autoFetchKey) return;
+    // autoFetchKey 变化时触发自动获取
+    const timer = setTimeout(() => {
+      if (account?.username && account?.password && !fetchAttempted) {
+        setFetchAttempted(true);
+        fetchScores(false);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [autoFetchKey]);
 
   const fetchScores = async (fetchAll) => {
     if (!account?.username || !account?.password) { setError('账号信息不完整'); return; }

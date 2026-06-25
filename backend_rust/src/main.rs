@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use log::{info, error};
