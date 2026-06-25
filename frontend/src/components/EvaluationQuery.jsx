@@ -1,8 +1,4 @@
 import React, { useState } from 'react';
-import {
-  Button, Card, Text, Spinner,
-  Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow
-} from '@fluentui/react-components';
 
 function EvaluationQuery({ account }) {
   const [loading, setLoading] = useState(false);
@@ -61,101 +57,152 @@ function EvaluationQuery({ account }) {
 
   const unsubmittedCount = teachers.filter(t => t.submitted !== '是').length;
   const submittedCount = teachers.length - unsubmittedCount;
+  const hasData = teachers.length > 0;
 
   return (
-    <div style={{ padding: '8px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>教学评价</span>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <Button appearance="primary" disabled={loading || submitting} onClick={fetchTeachers} size="small">
+    <div className="eq-root">
+      <div className="eq-header">
+        <h2>教学评价</h2>
+        <div className="eq-actions">
+          <button className="btn btn-outline" disabled={loading || submitting} onClick={fetchTeachers}>
             {loading ? '获取中...' : '刷新列表'}
-          </Button>
-          <Button appearance="primary" disabled={loading || submitting || unsubmittedCount === 0}
-            onClick={submitAll} size="small" style={{ backgroundColor: '#107c10' }}>
+          </button>
+          <button className="btn btn-green" disabled={loading || submitting || unsubmittedCount === 0} onClick={submitAll}>
             {submitting ? '评教中...' : `一键评教 (${unsubmittedCount})`}
-          </Button>
+          </button>
         </div>
       </div>
 
-      {showSuccess && <div style={{ padding: '6px 12px', marginBottom: '12px', fontSize: '12px', borderRadius: '3px', background: 'var(--bg-alert-success)', border: '1px solid #c3e6cb', color: '#2e7d32' }}>✓ 评教完成！所有教师已提交。</div>}
-      {error && <div style={{ padding: '6px 12px', marginBottom: '12px', fontSize: '12px', borderRadius: '3px', background: 'var(--bg-alert-error)', border: '1px solid #f5c6cb', color: '#c62828' }}>✗ {error}</div>}
-      {info && !error && <div style={{ padding: '6px 12px', marginBottom: '12px', fontSize: '12px', borderRadius: '3px', background: 'var(--bg-alert-info)', border: '1px solid #b8daff', color: '#1565c0' }}>
-        ℹ {info}{submitting && <span style={{ marginLeft: '12px' }}>{progress}</span>}
-      </div>}
+      {showSuccess && <div className="msg msg-success">✓ 评教完成！所有教师已提交。</div>}
+      {error && <div className="msg msg-error">✗ {error}</div>}
+      {info && !error && <div className="msg msg-info">ℹ {info}{submitting && <span style={{ marginLeft: 12 }}>{progress}</span>}</div>}
 
-      {teachers.length > 0 && (
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-          {[
-            { label: '总人数', value: teachers.length, color: '#0078d4' },
-            { label: '已提交', value: submittedCount, color: '#4caf50' },
-            { label: '待评', value: unsubmittedCount, color: '#ff9800' }
-          ].map(s => (
-            <div key={s.label} style={{
-              flex: 1, padding: '12px 16px', background: 'var(--bg-stat-tile)',
-              border: '1px solid var(--border-color)', borderLeft: `3px solid ${s.color}`
-            }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</div>
-              <div style={{ fontSize: '24px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '4px' }}>{s.value}</div>
-            </div>
-          ))}
+      {submitting && (
+        <div className="eq-progress">
+          <div className="eq-progress-bar"><div className="eq-progress-fill" style={{ width: progress ? '50%' : '0%' }} /></div>
+          <span className="eq-progress-text">{progress || '准备中...'}</span>
         </div>
       )}
 
-      {teachers.length > 0 && (
-        <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)' }}>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {[['#', '30px'], ['教师编号', '60px'], ['教师姓名', ''], ['所属院系', ''], ['评教类别', '80px'], ['总评分', '60px'], ['状态', '70px']].map(([label, w]) => (
-                  <TableHeaderCell key={label} style={{
-                    fontSize: '12px', padding: '4px 8px', color: 'var(--text-secondary)',
-                    whiteSpace: 'nowrap', width: w || undefined,
-                    background: 'var(--bg-table-header)', borderBottom: '1px solid var(--border-color)'
-                  }}>{label}</TableHeaderCell>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {teachers.map((t, i) => {
-                const done = t.submitted === '是';
-                return (
-                  <TableRow key={`${t.teacher_id}-${i}`} style={{
-                    background: done ? 'var(--bg-evaluated-row)' : (i % 2 === 0 ? 'var(--bg-table-row-even)' : 'var(--bg-table-row-odd)'),
-                    borderBottom: '1px solid var(--border-color)'
-                  }}>
-                    <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap', width: '30px' }}>{t.seq}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap', width: '60px' }}>{t.teacher_id}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-primary)' }}>{t.teacher_name}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-primary)' }}>{t.dept}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap', width: '80px' }}>{t.eval_type}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap', width: '60px' }}>{t.total_score}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap', width: '70px' }}>
-                      {done ? (
-                        <span style={{ display: 'inline-block', padding: '0 8px', height: '20px', lineHeight: '20px', fontSize: '11px', fontWeight: '600', borderRadius: '3px', background: 'var(--bg-badge-submitted)', color: '#2e7d32' }}>✓ 已提交</span>
-                      ) : (
-                        <span style={{ display: 'inline-block', padding: '0 8px', height: '20px', lineHeight: '20px', fontSize: '11px', fontWeight: '600', borderRadius: '3px', background: 'var(--bg-badge-pending)', color: '#e65100' }}>待评</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+      {hasData && (
+        <>
+          <div className="eq-stats">
+            <div className="eq-stat"><div className="eq-stat-lbl">总人数</div><div className="eq-stat-val">{teachers.length}</div></div>
+            <div className="eq-stat"><div className="eq-stat-lbl">已提交</div><div className="eq-stat-val" style={{ color: 'var(--success-fg)' }}>{submittedCount}</div></div>
+            <div className="eq-stat"><div className="eq-stat-lbl">待评</div><div className="eq-stat-val" style={{ color: 'oklch(45% 0.12 50)' }}>{unsubmittedCount}</div></div>
+          </div>
+
+          <div className="eq-table-wrap">
+            <table className="eq-table">
+              <thead>
+                <tr>
+                  <th style={{width:30}}>#</th>
+                  <th style={{width:70}}>教师编号</th>
+                  <th>教师姓名</th>
+                  <th>所属院系</th>
+                  <th style={{width:80}}>评教类别</th>
+                  <th style={{width:60}}>总评分</th>
+                  <th style={{width:70}}>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teachers.map((t, i) => {
+                  const done = t.submitted === '是';
+                  return (
+                    <tr key={`${t.teacher_id}-${i}`} className={done ? 'tr-done' : ''}>
+                      <td className="td-muted" style={{width:30}}>{t.seq}</td>
+                      <td className="td-muted" style={{width:70}}>{t.teacher_id}</td>
+                      <td>{t.teacher_name}</td>
+                      <td>{t.dept}</td>
+                      <td className="td-muted" style={{width:80}}>{t.eval_type}</td>
+                      <td className="td-muted" style={{width:60}}>{t.total_score}</td>
+                      <td style={{width:70}}>
+                        {done ? <span className="e-badge e-done">✓ 已提交</span> : <span className="e-badge e-pending">待评</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {!loading && !hasData && (
+        <div className="eq-empty">
+          <p>暂无评价数据</p>
+          <span className="eq-empty-hint">点击上方「刷新列表」按钮获取</span>
         </div>
       )}
 
-      {!loading && teachers.length === 0 && (
-        <div style={{ padding: '40px 0', textAlign: 'center' }}>
-          <div style={{ color: 'var(--text-secondary)' }}>暂无评价数据</div>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>点击上方 "刷新列表" 按钮获取</div>
-        </div>
-      )}
       {loading && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '40px 0' }}>
-          <Spinner size="large" />
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>正在获取评价列表...</div>
+        <div className="eq-loading">
+          <div className="spinner" />
+          <p>正在获取评价列表...</p>
         </div>
       )}
+
+      <style>{`
+        .eq-root {}
+        .eq-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .eq-header h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+        .eq-actions { display: flex; gap: 8px; align-items: center; }
+
+        .btn {
+          height: 28px; padding: 0 12px; border: 0; border-radius: var(--radius-xs);
+          font: 500 12px/1 var(--font); cursor: pointer; white-space: nowrap;
+          transition: opacity 0.12s;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-outline { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+        .btn-outline:hover { background: var(--surface-hover); }
+        .btn-outline:disabled { opacity: 0.4; cursor: default; }
+        .btn-green { background: var(--success-fg); color: #fff; }
+        .btn-green:hover { opacity: 0.88; }
+        .btn-green:disabled { opacity: 0.5; cursor: default; }
+
+        .msg { padding: 9px 14px; margin-bottom: 12px; border-radius: var(--radius-sm); font-size: 13px; }
+        .msg-success { background: var(--success-bg); color: var(--success-fg); }
+        .msg-error { background: var(--danger-bg); color: var(--danger-fg); }
+        .msg-info { background: var(--info-bg); color: var(--info-fg); }
+
+        .eq-progress { padding: 9px 14px; margin-bottom: 12px; border-radius: var(--radius-sm); background: var(--info-bg); display: flex; align-items: center; gap: 10px; }
+        .eq-progress-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+        .eq-progress-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.3s; }
+        .eq-progress-text { font-size: 12px; color: var(--info-fg); white-space: nowrap; }
+
+        .eq-stats { display: flex; gap: 12px; margin-bottom: 14px; }
+        .eq-stat { flex: 1; padding: 12px 16px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); }
+        .eq-stat-lbl { font-size: 11px; color: var(--muted); letter-spacing: 0.03em; margin-bottom: 3px; }
+        .eq-stat-val { font: 600 22px/1.2 system-ui; letter-spacing: -0.02em; }
+
+        .eq-table-wrap { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+        .eq-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .eq-table thead { background: var(--surface); }
+        .eq-table th { padding: 7px 9px; text-align: left; font-weight: 500; color: var(--muted); white-space: nowrap; border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: 0.02em; }
+        .eq-table td { padding: 6px 9px; color: var(--fg); border-bottom: 1px solid var(--border); }
+        .eq-table tbody tr:last-child td { border-bottom: 0; }
+        .eq-table tbody tr:nth-child(even) { background: var(--surface); }
+        .tr-done { background: var(--success-bg) !important; }
+        .td-muted { color: var(--muted) !important; }
+
+        .e-badge { display: inline-block; padding: 0 6px; height: 19px; line-height: 19px; font-size: 11px; font-weight: 600; border-radius: 3px; white-space: nowrap; }
+        .e-done { background: var(--success-bg); color: var(--success-fg); }
+        .e-pending { background: oklch(50% 0.14 50 / 0.08); color: oklch(42% 0.12 50); }
+
+        .spinner {
+          width: 28px; height: 28px; margin: 0 auto;
+          border: 3px solid var(--border); border-top-color: var(--accent);
+          border-radius: 50%; animation: eq-spin 0.7s linear infinite;
+        }
+        @keyframes eq-spin { to { transform: rotate(360deg); } }
+
+        .eq-empty { padding: 48px 0; text-align: center; }
+        .eq-empty p { color: var(--muted); font-size: 14px; margin: 0 0 4px; }
+        .eq-empty-hint { font-size: 12px; color: var(--muted); }
+        .eq-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 0; }
+        .eq-loading p { font-size: 13px; color: var(--muted); margin: 0; }
+      `}</style>
     </div>
   );
 }
