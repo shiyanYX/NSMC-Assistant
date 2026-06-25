@@ -186,11 +186,7 @@ function App() {
 
   useEffect(() => {
     startBackend();
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser));
-      setIsLoggedIn(true);
-    }
+    // 只恢复"记住密码"的表单字段，不自动登录
     const savedLogin = localStorage.getItem('savedLogin');
     if (savedLogin) {
       const loginData = JSON.parse(savedLogin);
@@ -231,6 +227,7 @@ function App() {
   const handleLogout = () => {
     setIsLoggedIn(false); setCurrentUser(null);
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('savedLogin'); // 清掉记住的密码
   };
 
   const handleInputChange = (e) => {
