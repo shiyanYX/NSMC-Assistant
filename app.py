@@ -16,86 +16,21 @@ def login():
         password = data.get('password')
 
         if not username or not password:
-            return jsonify({
-                'success': False,
-                'message': '请提供学号和密码'
-            }), 400
+            return jsonify({'success': False, 'message': '请提供学号和密码'}), 400
 
-        # 尝试登录验证（只验证，不获取成绩）
-        import requests
-        from bs4 import BeautifulSoup
-        import base64
+        success, real_name, _, error_msg = score_fetcher_http.verify_login(username, password)
 
-        session = requests.Session()
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
-
-        # 访问登录页面获取cookie
-        login_url = 'https://jiaowu3.nsmc.edu.cn/jsxsd/'
-        session.get(login_url, verify=False, timeout=10)
-
-        # 准备登录数据
-        encoded_user = base64.b64encode(username.encode('utf-8')).decode('utf-8')
-        encoded_pass = base64.b64encode(password.encode('utf-8')).decode('utf-8')
-        encoded = f'{encoded_user}%%%{encoded_pass}'
-
-        # 发送登录请求
-        login_api = 'https://jiaowu3.nsmc.edu.cn/jsxsd/xk/LoginToXk'
-        response = session.post(login_api, data={'encoded': encoded}, verify=False, timeout=10)
-
-        # 检查登录是否成功
-        if 'xsMain' in response.url or 'framework' in response.url:
-            # 获取用户姓名
-            real_name = username
-            try:
-                main_page = session.get('https://jiaowu3.nsmc.edu.cn/jsxsd/framework/xsMain.jsp', verify=False, timeout=10)
-                soup = BeautifulSoup(main_page.text, 'html.parser')
-                
-                # 尝试从用户信息区域获取姓名
-                user_info = soup.select_one('.edu-user')
-                if user_info:
-                    # 尝试直接从userInfo中获取姓名
-                    user_info_div = user_info.select_one('.userInfo')
-                    if user_info_div:
-                        name_p = user_info_div.find('p')
-                        if name_p:
-                            real_name = name_p.get_text(strip=True)
-                    
-                    # 备选方法：从所有标签中提取
-                    if real_name == username:
-                        name_tags = user_info.find_all(['p', 'span', 'div'])
-                        for tag in name_tags:
-                            text = tag.get_text(strip=True)
-                            if text:
-                                # 尝试判断是否为姓名，过滤掉身份信息
-                                clean_text = text.replace('学生', '').replace('老师', '').replace('教职工', '').strip()
-                                if len(clean_text) > 1 and len(clean_text) < 10 and not clean_text.isdigit():
-                                    real_name = clean_text
-                                    break
-            except Exception as e:
-                print(f"获取姓名时出错: {e}")
-                pass
-
+        if success:
             return jsonify({
                 'success': True,
-                'data': {
-                    'username': username,
-                    'name': real_name
-                },
+                'data': {'username': username, 'name': real_name},
                 'message': '登录成功'
             })
         else:
-            return jsonify({
-                'success': False,
-                'message': '登录失败，请检查学号和密码'
-            }), 401
+            return jsonify({'success': False, 'message': error_msg}), 401
 
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'服务器错误: {str(e)}'
-        }), 500
+        return jsonify({'success': False, 'message': f'服务器错误: {str(e)}'}), 500
 
 
 @app.route('/api/evaluation/list', methods=['POST'])

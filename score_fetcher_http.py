@@ -272,6 +272,18 @@ if __name__ == '__main__':
 
 # ========== 教学评价 ==========
 
+def verify_login(username, password):
+    """只验证登录并获取姓名，不爬取任何数据。返回 (success, real_name, session, error_msg)"""
+    session = _create_session()
+    if not _login_session(session, username, password):
+        return False, None, None, '登录失败，请检查学号和密码'
+
+    real_name = get_user_name(session)
+    if not real_name:
+        real_name = username
+
+    return True, real_name, session, None
+
 def _create_session():
     """创建带 User-Agent 的 requests session"""
     session = requests.Session()
