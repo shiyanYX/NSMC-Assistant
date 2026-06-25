@@ -1,10 +1,11 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import score_fetcher_http
 import re
+import os
 
-app = Flask(__name__)
-CORS(app)  # 允许跨域请求
+app = Flask(__name__, static_folder=None)
+CORS(app)
 
 @app.route('/api/login', methods=['POST'])
 def login():
