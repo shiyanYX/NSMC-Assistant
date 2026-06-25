@@ -278,7 +278,7 @@ function App() {
         </div>
       ) : (
         <main className="app-main">
-          {currentNav === 'score' && <ScoreQuery account={currentUser} autoFetchKey={isLoggedIn} />}
+          {currentNav === 'score' && <ScoreQuery account={currentUser} />}
           {currentNav === 'evaluation' && <EvaluationQuery account={currentUser} />}
         </main>
       )}

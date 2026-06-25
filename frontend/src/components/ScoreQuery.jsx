@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const SCORE_MODES = [
   { value: 'all', label: '显示全部成绩' },
@@ -33,10 +33,10 @@ function mergeScores(oldScores, newScores, replaceAll) {
   return [...preserved, ...newScores];
 }
 
-function ScoreQuery({ account, autoFetchKey }) {
+function ScoreQuery({ account }) {
   const [loading, setLoading] = useState(false);
-  const [fetchAttempted, setFetchAttempted] = useState(false);
   const [error, setError] = useState('');
+  const autoFetched = useRef(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [scores, setScores] = useState([]);
   const [terms, setTerms] = useState(['all']);
@@ -64,18 +64,15 @@ function ScoreQuery({ account, autoFetchKey }) {
     } catch (_) {}
   }, [account?.username]);
 
-  // 登录后自动获取当前学期成绩（只执行一次）
+  // 登录后自动获取：仅首次挂载 + 无缓存时触发一次
   useEffect(() => {
-    if (account?.username && account?.password && !fetchAttempted && !autoFetchKey) return;
-    // autoFetchKey 变化时触发自动获取
-    const timer = setTimeout(() => {
-      if (account?.username && account?.password && !fetchAttempted) {
-        setFetchAttempted(true);
-        fetchScores(false);
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [autoFetchKey]);
+    if (!account?.username || !account?.password) return;
+    const cached = localStorage.getItem(`scores_cache_${account.username}`);
+    if (!cached && !autoFetched.current) {
+      autoFetched.current = true;
+      fetchScores(false);
+    }
+  }, []);
 
   const fetchScores = async (fetchAll) => {
     if (!account?.username || !account?.password) { setError('账号信息不完整'); return; }
