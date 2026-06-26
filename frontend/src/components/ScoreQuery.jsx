@@ -64,13 +64,31 @@ function ScoreQuery({ account }) {
     } catch (_) {}
   }, [account?.username]);
 
-  // 登录后自动获取：仅首次挂载 + 无缓存时触发一次
+  // 登录后自动获取：仅首次挂载 + 无缓存时触发，只查最新学期
   useEffect(() => {
     if (!account?.username || !account?.password) return;
     const cached = localStorage.getItem(`scores_cache_${account.username}`);
     if (!cached && !autoFetched.current) {
       autoFetched.current = true;
-      fetchScores(false);
+      fetch('http://localhost:5000/api/score', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: account.username, password: account.password, name: account.name, term: 'latest' })
+      }).then(r => r.json()).then(data => {
+        if (!data.success) return;
+        const ts = data.data.scores.map((s, i) => ({
+          id: i + 1, term: s['开课学期'] || s['学期'] || '', courseCode: s['课程编号'] || '',
+          courseName: s['课程名称'] || s['课 程名称'] || '', score: s['成绩'] || 0,
+          credit: parseFloat(s['学分'] || 0), hours: s['总学时'] || 0,
+          gpa: parseFloat(s['绩点'] || 0), assessment: s['考核方式'] || '',
+          nature: s['考试性质'] || '', attribute: s['课程属性'] || ''
+        }));
+        setScores(ts);
+        const tset = new Set(ts.map(s => s.term));
+        const sortedTerms = Array.from(tset).sort().reverse();
+        setTerms(['all', ...sortedTerms]);
+        if (sortedTerms.length > 0) setSelectedTerm(sortedTerms[0]);
+        localStorage.setItem(`scores_cache_${account.username}`, JSON.stringify({ scores: ts, cachedAt: new Date().toISOString() }));
+      }).catch(() => {}).finally(() => setLoading(false));
     }
   }, []);
 
@@ -79,7 +97,8 @@ function ScoreQuery({ account }) {
     setLoading(true); setError(''); setShowSuccess(false);
     setIsFetchingAll(!!fetchAll);
     try {
-      const term = fetchAll ? undefined : (selectedTerm !== 'all' ? selectedTerm : undefined);
+      // fetchAll=true 或学期未选时查全部；否则只查指定学期
+      const term = fetchAll ? undefined : (selectedTerm !== 'all' ? selectedTerm : 'latest');
       const response = await fetch('http://localhost:5000/api/score', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: account.username, password: account.password, name: account.name, term })

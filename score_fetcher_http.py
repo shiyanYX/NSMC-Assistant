@@ -194,9 +194,12 @@ def http_login_and_get_scores(username, password, name=None, term_filter=None):
         all_scores = []  # 存储所有学期的成绩
         headers = None
         
-        if term_filter:
+        if term_filter and term_filter != 'latest':
             # 如果指定了学期，只查询该学期
             terms_to_query = [term_filter]
+        elif term_filter == 'latest' and available_terms:
+            # 只查最新的学期
+            terms_to_query = [available_terms[0]['value']]
         else:
             # 否则查询所有学期
             terms_to_query = [term['value'] for term in available_terms] if available_terms else ['']
