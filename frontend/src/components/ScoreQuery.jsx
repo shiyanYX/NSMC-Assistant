@@ -64,13 +64,12 @@ function ScoreQuery({ account }) {
     } catch (_) {}
   }, [account?.username]);
 
-  // 登录后自动获取：仅首次挂载 + 无缓存时触发，只查最新学期
+  // 登录后自动获取最新学期（每次组件挂载都触发，但只执行一次）
   useEffect(() => {
     if (!account?.username || !account?.password) return;
     if (autoFetched.current) return;
-    const cached = localStorage.getItem(`scores_cache_${account.username}`);
-    if (cached) return;
     autoFetched.current = true;
+    // 先尝试加载本地缓存显示，然后在后台刷新最新学期
     doAutoFetch();
   }, [account?.username, account?.password]);
 
