@@ -149,10 +149,11 @@ export default function LeaveRegistration({ account }) {
     finally { setLoading(false); }
   };
 
-  // Templates
+  // Templates（保存时排除去向时间字段）
   const hSTpl = () => {
     if (!tplName.trim()) return;
-    const u=[...templates,{id:Date.now(),name:tplName.trim(),fields:{...form},createdAt:new Date().toISOString()}];
+    const {leaveBeginDate, leaveBeginTime, leaveEndDate, leaveEndTime, goDate, goTime, backDate, backTime, ...rest} = form;
+    const u=[...templates,{id:Date.now(),name:tplName.trim(),fields:rest,createdAt:new Date().toISOString()}];
     setTemplates(u); saveT(xg2User||'',u); setTplName('');
   };
   const hLTpl = (t) => { setForm({...DEFAULT_FORM,...t.fields}); setShowTpl(false); setSuccessMsg('✅ 已加载: '+t.name); setTimeout(()=>setSuccessMsg(''),2000); };
