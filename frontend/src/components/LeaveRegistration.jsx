@@ -77,6 +77,7 @@ export default function LeaveRegistration({ account }) {
   // 独立 xg2 登录凭证（与主应用的教务系统账号无关）
   const [xg2Username, setXg2Username] = useState('');
   const [xg2Password, setXg2Password] = useState('');
+  const [rememberXg2, setRememberXg2] = useState(false);
 
   // Template dialog
   const [showTplDialog, setShowTplDialog] = useState(false);
@@ -90,6 +91,19 @@ export default function LeaveRegistration({ account }) {
     if (xg2Username) setTemplates(loadTemplates(xg2Username));
   }, [xg2Username]);
 
+  // 加载保存的 xg2 凭证
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('xg2_saved_login');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setXg2Username(parsed.username || '');
+        setXg2Password(parsed.password || '');
+        setRememberXg2(true);
+      }
+    } catch (_) {}
+  }, []);
+
   const durationText = calcDuration(form.leaveBeginDate, form.leaveBeginTime, form.leaveEndDate, form.leaveEndTime);
 
   // Login: separate xg2 credentials
@@ -97,6 +111,12 @@ export default function LeaveRegistration({ account }) {
     if (!xg2Username || !xg2Password) { setError('请输入 xg2 学号和密码'); return; }
     setLoading(true); setError('');
     try {
+      // 保存 xg2 凭证
+      if (rememberXg2) {
+        localStorage.setItem('xg2_saved_login', JSON.stringify({ username: xg2Username, password: xg2Password }));
+      } else {
+        localStorage.removeItem('xg2_saved_login');
+      }
       const resp = await fetch('http://localhost:5000/api/xg2/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -202,6 +222,7 @@ export default function LeaveRegistration({ account }) {
             <label>xg2 密码</label>
             <input type="password" value={xg2Password} onChange={e => setXg2Password(e.target.value)} className="lr-input" placeholder="请输入密码" />
           </div>
+          <label className="lr-checkbox"><input type="checkbox" checked={rememberXg2} onChange={e => setRememberXg2(e.target.checked)} /><span>记住 xg2 账号密码</span></label>
           <button className="btn btn-primary lr-btn-full" disabled={loading} onClick={handleLogin}>
             {loading ? '登录中...' : '开始登记'}
           </button>
@@ -341,4 +362,6 @@ const CSS = `
 .lr-tpl-name { flex: 1; font-size: 13px; font-weight: 500; }
 .lr-tpl-date { font-size: 11px; color: var(--muted); }
 .lr-empty { font-size: 13px; color: var(--muted); text-align: center; padding: 16px 0; }
+.lr-checkbox { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; cursor: pointer; font-size: 13px; color: var(--muted); }
+.lr-checkbox input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
 `;
