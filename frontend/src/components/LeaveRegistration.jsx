@@ -199,7 +199,10 @@ export default function LeaveRegistration({ account }) {
         <div className="lr-info-row"><span>放假：{listData?.begin_date} ~ {listData?.end_date}</span><span>登记截止：{listData?.leave_end_date}</span></div>
         {listData?.memo&&<div className="lr-info-memo">{listData.memo}</div>}
       </div>
-      <button className="btn btn-primary" style={{marginBottom:12}} onClick={handleNew} disabled={loading}>{loading?'加载中...':'+ 新增去向登记'}</button>
+      <button className="btn btn-primary" style={{marginBottom:12}} onClick={handleNew}
+        disabled={loading || !(listData?.status||'').includes('可以')}
+        title={!(listData?.status||'').includes('可以') ? listData?.status : ''}>
+        {loading?'加载中...':'+ 新增去向登记'}</button>
       <div className="lr-section-title">历史记录</div>
       {listData?.records?.length>0?(
         <table className="lr-table"><thead><tr><th>节假日</th><th>去向时间</th><th>事由</th><th>去向地点</th></tr></thead>
