@@ -235,11 +235,11 @@ export default function LeaveRegistration({ account }) {
 
         {/* 去向时间 */}
         <tr><td className="lr-ot-label">去向时间：</td><td colSpan={3} className="lr-ot-value">
-          开始 <D v={form.leaveBeginDate} onChange={v=>sets('leaveBeginDate',v)} type="date" s={{width:90}}/>
+          开始 <D v={form.leaveBeginDate} onChange={v=>sets('leaveBeginDate',v)} type="date"/>
           <span style={{color:'red'}}>*</span>
           <Sel v={form.leaveBeginTime} onChange={v=>sets('leaveBeginTime',v)} o={HOURS}/>
           &nbsp;至&nbsp;
-          <D v={form.leaveEndDate} onChange={v=>sets('leaveEndDate',v)} type="date" s={{width:90}}/>
+          <D v={form.leaveEndDate} onChange={v=>sets('leaveEndDate',v)} type="date"/>
           <span style={{color:'red'}}>*</span>
           <Sel v={form.leaveEndTime} onChange={v=>sets('leaveEndTime',v)} o={HOURS}/>
           共计&nbsp;<span className="lr-duration-o">{duration||'0天0小时'}</span>
@@ -328,7 +328,7 @@ export default function LeaveRegistration({ account }) {
           <td className="lr-ot-label" rowSpan={2}>往返交通工具：</td>
           <td colSpan={3} className="lr-ot-value">
             <div style={{marginBottom:4}}>
-              去：<D v={form.goDate} onChange={v=>sets('goDate',v)} type="date" s={{width:90}}/>
+              去：<D v={form.goDate} onChange={v=>sets('goDate',v)} type="date"/>
               <Sel v={form.goTime} onChange={v=>sets('goTime',v)} o={HOURS}/>
               &nbsp;;交通工具：
               {VEHICLES.map(v=><label key={v} className="lr-radio-label"><input type="radio" checked={form.goVehicle===v} onChange={()=>sets('goVehicle',v)}/>{v}</label>)}
@@ -383,6 +383,7 @@ const CSS = `
 .lr-field-col{margin-bottom:6px}
 .lr-field-col label{display:block;font-size:12px;color:var(--muted);margin-bottom:2px}
 .lr-input,.lr-select{font:13px/1.4 var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border);border-radius:4px;outline:none;padding:4px 7px;height:28px}
+.lr-input[type="date"]{width:140px;min-width:140px}
 .lr-input:focus,.lr-select:focus{border-color:var(--accent)}
 .lr-select{cursor:pointer}
 .lr-select-sm{width:60px}
