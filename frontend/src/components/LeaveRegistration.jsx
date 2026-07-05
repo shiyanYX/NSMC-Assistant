@@ -28,7 +28,7 @@ const LEAVE_TYPES = [
 ];
 
 const VEHICLES = ['汽车', '火车', '飞机', '自行车', '其他'];
-const HOURS = Array.from({ length: 24 }, (_, i => ({ value: String(i).padStart(2, '0'), label: `${i}点` })));
+const HOURS = Array.from({ length: 24 }, (_, i) => ({ value: String(i).padStart(2, '0'), label: `${i}点` }));
 const PEOPLE_COUNT = Array.from({ length: 31 }, (_, i) => ({ value: String(i), label: `${i}人` }));
 
 /* ===== 默认表单值 ===== */
