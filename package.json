@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "base-64": "^1.0.0",
+    "node-forge": "^1.4.0"
+  }
+}
