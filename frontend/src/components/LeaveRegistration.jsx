@@ -48,6 +48,7 @@ export default function LeaveRegistration({ account }) {
   const [showTpl, setShowTpl] = useState(false);
   const [tplName, setTplName] = useState('');
   const [tplFilter, setTplFilter] = useState('');
+  const [editInfo, setEditInfo] = useState(null);
 
   const sets = sf(setForm);
   const duration = calcDur(form.leaveBeginDate, form.leaveBeginTime, form.leaveEndDate, form.leaveEndTime);
@@ -59,6 +60,20 @@ export default function LeaveRegistration({ account }) {
       if (s) { const p=JSON.parse(s); setXg2User(p.username||''); setXg2Pass(p.password||''); setRememberXg2(true); }
     } catch(_) {}
   }, [xg2User]);
+
+  // 表单页时获取编辑页信息
+  const loadedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (page !== 'form' || loadedRef.current) return;
+    loadedRef.current = true;
+    (async () => {
+      try {
+        const r = await fetch('http://localhost:5000/api/xg2/edit-form', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:xg2User})});
+        const d = await r.json();
+        if (d.success) setEditInfo(d.data);
+      } catch(_) {}
+    })();
+  }, [page]);
 
   // Login
   const handleLogin = async () => {
@@ -178,22 +193,6 @@ export default function LeaveRegistration({ account }) {
 
   // === Form page ===
   if (page === 'form') {
-    // 保留前端编辑页基本信息（来自 d.data）
-    const [editInfo, setEditInfo] = useState(null);
-    // loadedEditRef 防止重复请求
-    const loadedRef = React.useRef(false);
-    React.useEffect(() => {
-      if (loadedRef.current) return;
-      loadedRef.current = true;
-      (async () => {
-        try {
-          const r = await fetch('http://localhost:5000/api/xg2/edit-form', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:xg2User})});
-          const d = await r.json();
-          if (d.success) setEditInfo(d.data);
-        } catch(_) {}
-      })();
-    }, []);
-
     return (
     <div className="lr-root">
       <div className="lr-header"><h2>新增去向登记</h2><div className="lr-header-actions"><button className="btn btn-outline" onClick={()=>setShowTpl(true)}>模板</button><button className="btn btn-primary" disabled={loading} onClick={handleSubmit}>{loading?'提交中...':'提交'}</button></div></div>
