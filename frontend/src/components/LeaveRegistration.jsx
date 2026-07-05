@@ -86,10 +86,11 @@ export default function LeaveRegistration({ account }) {
       const d = await r.json();
       if (!d.success) { setError(d.message||'获取编辑页失败'); return; }
       setEditInfo(d.data);
-      sets('leaveBeginDate', d.data.begin_date||'');
-      sets('leaveEndDate', d.data.end_date||'');
-      sets('goDate', d.data.begin_date||'');
-      sets('backDate', d.data.end_date||'');
+      // Pre-fill dates from listData (edit page doesnt have them)
+      sets('leaveBeginDate', listData?.begin_date||'');
+      sets('leaveEndDate', listData?.end_date||'');
+      sets('goDate', listData?.begin_date||'');
+      sets('backDate', listData?.end_date||'');
       setPage('form');
     } catch(e) { setError('网络错误: '+e.message); }
     finally { setLoading(false); }
@@ -190,10 +191,10 @@ export default function LeaveRegistration({ account }) {
       {showTpl&&tplDialog}
 
       {/* 节假日信息参考 */}
-      {editInfo&&<div className="lr-info-card" style={{marginBottom:12}}>
-        <div className="lr-info-title">{editInfo.holiday_name||'节假日信息'}</div>
-        <div className="lr-info-row"><span>放假：{editInfo.begin_date||'-'} ~ {editInfo.end_date||'-'}</span><span>登记截止：{editInfo.leave_end_date||'-'}</span></div>
-        {editInfo.memo&&<div className="lr-info-memo">{editInfo.memo}</div>}
+      {listData&&<div className="lr-info-card" style={{marginBottom:12}}>
+        <div className="lr-info-title">{listData.holiday_name||'节假日信息'}</div>
+        <div className="lr-info-row"><span>放假：{listData.begin_date||'-'} ~ {listData.end_date||'-'}</span><span>登记截止：{listData.leave_end_date||'-'}</span></div>
+        {listData.memo&&<div className="lr-info-memo">{listData.memo}</div>}
       </div>}
 
       <Sect title="去向时间"><span className="req">*</span><Row>开始 <D v={form.leaveBeginDate} onChange={v=>sets('leaveBeginDate',v)} type="date"/> <Sel v={form.leaveBeginTime} onChange={v=>sets('leaveBeginTime',v)} o={HOURS}/> 至 <D v={form.leaveEndDate} onChange={v=>sets('leaveEndDate',v)} type="date"/> <Sel v={form.leaveEndTime} onChange={v=>sets('leaveEndTime',v)} o={HOURS}/> {duration&&<span className="lr-duration">共 {duration}</span>}</Row></Sect>
