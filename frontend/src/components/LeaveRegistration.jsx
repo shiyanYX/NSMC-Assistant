@@ -82,11 +82,15 @@ export default function LeaveRegistration({ account }) {
 
   useEffect(() => {
     if (xg2User) setTemplates(loadT(xg2User));
+  }, [xg2User]);
+
+  // 加载保存的 xg2 凭证（仅首次挂载时）
+  useEffect(() => {
     try {
       const s = localStorage.getItem('xg2_saved_login');
       if (s) { const p=JSON.parse(s); setXg2User(p.username||''); setXg2Pass(p.password||''); setRememberXg2(true); }
     } catch(_) {}
-  }, [xg2User]);
+  }, []); // 空依赖数组 = 仅首次执行，不再监听 xg2User 变化导致覆盖用户输入
 
   // Login
   const handleLogin = async () => {
