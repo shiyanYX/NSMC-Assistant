@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ScoreQuery from './components/ScoreQuery';
 import EvaluationQuery from './components/EvaluationQuery';
+import LeaveRegistration from './components/LeaveRegistration';
 
 const isTauri = typeof window !== 'undefined' && window.__TAURI__;
 
@@ -235,6 +236,8 @@ function App() {
                onClick={() => switchNav('score')}>成绩查询</a>
             <a className={currentNav === 'evaluation' && !showHome ? 'active' : ''}
                onClick={() => switchNav('evaluation')}>教学评价</a>
+            <a className={currentNav === 'leave' && !showHome ? 'active' : ''}
+               onClick={() => switchNav('leave')}>去向登记</a>
           </nav>
         </div>
         <div className="header-right">
@@ -274,12 +277,24 @@ function App() {
               <p>一键评教，实时查看进度和结果</p>
               <span className="hc-badge hc-orange">每学期一次</span>
             </div>
+            <div className="home-card" onClick={() => switchNav('leave')}>
+              <div className="home-card-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                  <circle cx="12" cy="10" r="3"/>
+                </svg>
+              </div>
+              <h3>去向登记</h3>
+              <p>节假日去向登记，支持模板快速填写</p>
+              <span className="hc-badge hc-blue">学工系统</span>
+            </div>
           </div>
         </div>
       ) : (
         <main className="app-main">
           {currentNav === 'score' && <ScoreQuery account={currentUser} />}
           {currentNav === 'evaluation' && <EvaluationQuery account={currentUser} />}
+          {currentNav === 'leave' && <LeaveRegistration account={currentUser} />}
         </main>
       )}
 

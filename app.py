@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import score_fetcher_http
+import xg2_fetcher
 import re
 import os
 
@@ -159,6 +160,104 @@ def get_score():
             'success': False,
             'message': f'服务器错误: {str(e)}'
         }), 500
+
+@app.route('/api/xg2/prepare', methods=['POST'])
+def xg2_prepare():
+    """准备 xg2 登录，返回 RSA 公钥 + 验证码 + 隐藏字段"""
+    try:
+        data = xg2_fetcher.prepare_login()
+        return jsonify({'success': True, 'data': data})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'服务器错误: {str(e)}'}), 500
+
+
+@app.route('/api/xg2/login', methods=['POST'])
+def xg2_login():
+    """登录 xg2 学工系统 + 获取节假日表单信息"""
+    try:
+        data = request.json
+        username = data.get('username')
+        password = data.get('password')
+        captcha = data.get('captcha')
+
+        if not username or not password or not captcha:
+            return jsonify({'success': False, 'message': '请提供学号、密码和验证码'}), 400
+
+        # 先准备（如果需要首次 session）
+        prep = xg2_fetcher.prepare_login()
+
+        ok, session, err = xg2_fetcher.do_login(
+            username, password, captcha,
+            prep['viewstate'], prep['eventvalidation'],
+            prep.get('viewstategenerator', ''), prep['rsa_modulus']
+        )
+        if not ok:
+            return jsonify({'success': False, 'message': err or 'xg2 登录失败'}), 401
+
+        # 获取节假日表单
+        form = xg2_fetcher.get_leave_form(session)
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'username': username,
+                'student_name': form.get('student_name', ''),
+                'holiday_name': form.get('holiday_name', ''),
+                'begin_date': form.get('begin_date', ''),
+                'end_date': form.get('end_date', ''),
+                'leave_begin_date': form.get('leave_begin_date', ''),
+                'leave_end_date': form.get('leave_end_date', ''),
+                'memo': form.get('memo', ''),
+                'viewstate': form.get('viewstate', ''),
+                'eventvalidation': form.get('eventvalidation', ''),
+                'viewstategenerator': form.get('viewstategenerator', ''),
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'服务器错误: {str(e)}'}), 500
+
+
+@app.route('/api/xg2/submit', methods=['POST'])
+def xg2_submit():
+    """提交节假日去向登记"""
+    try:
+        data = request.json
+        username = data.get('username')
+        password = data.get('password')
+        captcha = data.get('captcha')
+        form_fields = data.get('form_fields', {})
+
+        if not username or not password or not form_fields:
+            return jsonify({'success': False, 'message': '缺少必要参数'}), 400
+
+        # 重新登录（获取 session + VIEWSTATE）
+        prep = xg2_fetcher.prepare_login()
+        ok, session, err = xg2_fetcher.do_login(
+            username, password, captcha or 'test',
+            prep['viewstate'], prep['eventvalidation'],
+            prep.get('viewstategenerator', ''), prep['rsa_modulus']
+        )
+        if not ok:
+            return jsonify({'success': False, 'message': err or 'xg2 登录失败'}), 401
+
+        # 获取编辑页以获取 VIEWSTATE
+        form = xg2_fetcher.get_leave_form(session)
+
+        # 提交表单
+        ok, msg = xg2_fetcher.submit_leave(
+            session, form_fields,
+            form.get('viewstate', ''),
+            form.get('eventvalidation', ''),
+            form.get('viewstategenerator', ''),
+        )
+
+        return jsonify({
+            'success': ok,
+            'message': msg
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'服务器错误: {str(e)}'}), 500
+
 
 if __name__ == '__main__':
     import socket
