@@ -75,9 +75,21 @@ function ScoreQuery({ account }) {
 
   const doAutoFetch = () => {
     setLoading(true);
+    // 从缓存中找到最新学期（不依赖 React state，避免 useEffect 时序问题）
+    let latestTerm = 'latest';
+    try {
+      const raw = localStorage.getItem(`scores_cache_${account.username}`);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached && Array.isArray(cached.scores) && cached.scores.length > 0) {
+          const availableTerms = [...new Set(cached.scores.map(s => s.term))].sort().reverse();
+          if (availableTerms.length > 0) latestTerm = availableTerms[0];
+        }
+      }
+    } catch (_) {}
     fetch('http://localhost:5000/api/score', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: account.username, password: account.password, name: account.name, term: 'latest' })
+      body: JSON.stringify({ username: account.username, password: account.password, name: account.name, term: latestTerm })
     }).then(r => r.json()).then(data => {
       if (!data.success) return;
       const ts = data.data.scores.map((s, i) => ({
@@ -87,12 +99,19 @@ function ScoreQuery({ account }) {
         gpa: parseFloat(s['绩点'] || 0), assessment: s['考核方式'] || '',
         nature: s['考试性质'] || '', attribute: s['课程属性'] || ''
       }));
-      setScores(ts);
-      const tset = new Set(ts.map(s => s.term));
+      // 合并而非替换——从 localStorage 读当前缓存做基准（避免 state 未更新）
+      let current = [];
+      try {
+        const raw = localStorage.getItem(`scores_cache_${account.username}`);
+        if (raw) { const c = JSON.parse(raw); if (c && Array.isArray(c.scores)) current = c.scores; }
+      } catch (_) {}
+      const merged = mergeScores(current, ts, false);
+      setScores(merged);
+      const tset = new Set(merged.map(s => s.term));
       const sortedTerms = Array.from(tset).sort().reverse();
       setTerms(['all', ...sortedTerms]);
       if (sortedTerms.length > 0) setSelectedTerm(sortedTerms[0]);
-      localStorage.setItem(`scores_cache_${account.username}`, JSON.stringify({ scores: ts, cachedAt: new Date().toISOString() }));
+      localStorage.setItem(`scores_cache_${account.username}`, JSON.stringify({ scores: merged, cachedAt: new Date().toISOString() }));
     }).catch(() => {}).finally(() => setLoading(false));
   };
 
