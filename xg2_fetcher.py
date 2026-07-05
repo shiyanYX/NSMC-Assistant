@@ -3,6 +3,7 @@ xg2 学工系统（xg2.nsmc.edu.cn）登录 + 节假日去向登记
 """
 import re, random, base64, threading
 import requests, urllib3
+from urllib.parse import quote_plus
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -21,190 +22,221 @@ _cache_lock = threading.Lock()
 def _make_session():
     s = requests.Session()
     s.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'zh-CN,zh;q=0.9',
     })
     s.verify = False
     return s
 
 
-# ====== RSA 加密（与 xg2 JS 实现一致） ======
+def _gbk_form(data):
+    return '&'.join(f"{quote_plus(k.encode('gb2312'))}={quote_plus(v.encode('gb2312'))}" for k, v in data.items())
 
 
-def _encrypted_string(username, password, modulus_hex):
-    """
-    RSA 加密。与 JS RSA.js 兼容：
-    base64(user) + '\\' + base64(pass) → PKCS#1 v1.5 填充 → pow_mod → hex(256)
-    """
+def _encrypt_rsa(username, password, modulus_hex):
+    """RSA 加密：base64(user)\\base64(pass) → PKCS#1 v1.5 填充 → pow_mod → hex(256)"""
     raw = base64.b64encode(username.encode()).decode() + '\\' + base64.b64encode(password.encode()).decode()
     rb = raw.encode('ascii')
-
-    ds = 128  # 1024-bit RSA = 128 bytes
-    ml = len(rb)
+    ds, ml = 128, len(rb)
     ps = max(8, ds - 3 - ml)
-
     b = bytearray(ds)
-    for x in range(ml):
-        b[x] = rb[ml - 1 - x]  # 消息逆序
-    b[ml] = 0  # 分隔
-    for x in range(ps):
-        b[ml + 1 + x] = random.randint(1, 255)  # 随机非零填充
-    b[ds - 2] = 2
-    b[ds - 1] = 0
-
-    m_int = int.from_bytes(b, 'little')
-    c = pow(m_int, 0x010001, int(modulus_hex, 16))
+    for x in range(ml): b[x] = rb[ml - 1 - x]
+    b[ml] = 0
+    for x in range(ps): b[ml + 1 + x] = random.randint(1, 255)
+    b[ds - 2] = 2; b[ds - 1] = 0
+    c = pow(int.from_bytes(b, 'little'), 0x010001, int(modulus_hex, 16))
     return hex(c)[2:].zfill(256)
 
 
-def _extract_aspnet_fields(html):
-    fields = {}
-    for name in ('__VIEWSTATE', '__EVENTVALIDATION', '__VIEWSTATEGENERATOR'):
-        m = re.search(rf'{re.escape(name)}[^>]*value="([^"]*)"', html)
-        if m:
-            fields[name] = m.group(1)
-    return fields
+def _aspnet_fields(html):
+    f = {}
+    for n in ('__VIEWSTATE', '__EVENTVALIDATION', '__VIEWSTATEGENERATOR'):
+        m = re.search(rf'{re.escape(n)}[^>]*value="([^"]*)"', html)
+        if m: f[n] = m.group(1)
+    return f
 
 
-def _extract_span_text(html, span_id):
-    m = re.search(rf'<span[^>]*id="{re.escape(span_id)}"[^>]*>([^<]*)</span>', html)
+def _span_text(html, sid):
+    m = re.search(rf'<span[^>]*id="{re.escape(sid)}"[^>]*>([^<]*)</span>', html)
     return m.group(1).strip() if m else ''
 
 
 # ====== 公开 API ======
 
-def login_and_get_form(username, password):
-    """登录 xg2 + 获取节假日去向登记表"""
+def login_and_get_list(username, password):
+    """
+    登录 xg2 → 获取 StuLeave.aspx 列表页。
+    返回 dict:
+      - success: bool
+      - 成功时：holiday_name, status, records[...], viewstate/eventvalidation/viewstategenerator（用于新增提交）
+      - 失败时：message
+    """
     session = _make_session()
 
-    # 1. GET 登录页 → 提取 RSA 公钥 + VIEWSTATE
+    # ---- GET 登录页 ----
     try:
-        resp = session.get(f'{BASE}/UserLogin.aspx',
-                           headers={'Referer': 'https://xg2.nsmc.edu.cn/'}, timeout=15)
-        html = resp.text
+        r = session.get(f'{BASE}/UserLogin.aspx',
+                        headers={'Referer': 'https://xg2.nsmc.edu.cn/'}, timeout=15)
     except Exception as e:
         return {'success': False, 'message': f'无法访问 xg2: {str(e)}'}
 
-    m = re.search(r'new RSAKeyPair\("([^"]+)",\s*"([^"]*)",\s*"([^"]+)"\)', html)
-    if not m:
-        return {'success': False, 'message': '未能获取 RSA 公钥'}
+    m = re.search(r'new RSAKeyPair\("([^"]+)",\s*"([^"]*)",\s*"([^"]+)"\)', r.text)
+    if not m: return {'success': False, 'message': '未能获取 RSA 公钥'}
     modulus_hex = m.group(3)
-    fields = _extract_aspnet_fields(html)
+    fields = _aspnet_fields(r.text)
 
-    # 2. 生成验证码 + RSA 加密
-    captcha = ''.join(random.choice(CAPTCHA_CHARS) for _ in range(4))
-    encrypted = _encrypted_string(username, password, modulus_hex)
-
-    # 3. POST 登录
-    form_data = {
-        '__LASTFOCUS': '',
-        '__EVENTTARGET': '',
-        '__EVENTARGUMENT': '',
+    # ---- POST 登录 ----
+    fd = {
+        '__LASTFOCUS': '', '__EVENTTARGET': '', '__EVENTARGUMENT': '',
         '__VIEWSTATE': fields.get('__VIEWSTATE', ''),
         '__VIEWSTATEGENERATOR': fields.get('__VIEWSTATEGENERATOR', ''),
         '__VIEWSTATEENCRYPTED': '',
         '__EVENTVALIDATION': fields.get('__EVENTVALIDATION', ''),
         'UserName': '******',
-        'posx': encrypted,
-        'codeInput': captcha,
+        'posx': _encrypt_rsa(username, password, modulus_hex),
+        'codeInput': ''.join(random.choice(CAPTCHA_CHARS) for _ in range(4)),
         'queryBtn': '登          录',
     }
 
-    from urllib.parse import quote_plus
-    body = '&'.join(f"{quote_plus(k.encode('gb2312'))}={quote_plus(v.encode('gb2312'))}" for k, v in form_data.items())
+    r2 = session.post(f'{BASE}/UserLogin.aspx', data=_gbk_form(fd),
+        headers={'Content-Type': 'application/x-www-form-urlencoded',
+                 'Referer': 'https://xg2.nsmc.edu.cn/', 'Origin': 'https://xg2.nsmc.edu.cn'},
+        timeout=15)
 
-    resp = session.post(f'{BASE}/UserLogin.aspx', data=body,
-        headers={
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Referer': 'https://xg2.nsmc.edu.cn/',
-            'Origin': 'https://xg2.nsmc.edu.cn',
-        }, timeout=15)
-    html = resp.text
-
-    # 调试：检查所有响应 cookie
-    cookie_dict = session.cookies.get_dict()
-    import os as _os
-    dbg_path = _os.path.join(_os.path.dirname(__file__) or '.', 'xg2_cookies.txt')
-    with open(dbg_path, 'w') as _f:
-        _f.write(str(cookie_dict))
-    # 检查 encrypt 是否与 diagnose 方法一致
-    dbg2_path = _os.path.join(_os.path.dirname(__file__) or '.', 'xg2_enc_debug.txt')
-    with open(dbg2_path, 'w') as _f:
-        _f.write(f'encrypted={encrypted}\ncaptcha={captcha}\n')
-
-    # 调试：检查 POST 后的 cookie
-    cookie_dict = session.cookies.get_dict()
-    import os as _os
-    with open(_os.path.join(_os.path.dirname(__file__) or '.', 'xg2_cookies.txt'), 'w') as _f:
-        _f.write(str(cookie_dict))
-
-    # 4. 检查登录结果
-    cookie_dict = session.cookies.get_dict()
-    is_authenticated = 'CenterSoft' in cookie_dict and 'code' in cookie_dict
-
-    if not is_authenticated:
-        alert = re.search(r"alert\(['\"]([^'\"]+)['\"]\)", html)
+    cookies = session.cookies.get_dict()
+    if 'CenterSoft' not in cookies or 'code' not in cookies:
+        alert = re.search(r"alert\(['\"]([^'\"]+)['\"]\)", r2.text)
         return {'success': False, 'message': alert.group(1) if alert else 'xg2 登录失败'}
 
-    # 5. 获取节假日去向编辑页
+    # ---- GET StuLeave.aspx 列表 ----
     try:
-        edit_resp = session.get(f'{BASE}/SystemForm/Leave/StuLeave_Edit.aspx?Status=Add', timeout=15)
-        edit_html = edit_resp.text
+        r3 = session.get(f'{BASE}/SystemForm/Leave/StuLeave.aspx', timeout=15)
+        list_html = r3.text
     except Exception as e:
-        return {'success': False, 'message': f'获取登记表失败: {str(e)}'}
+        return {'success': False, 'message': f'获取列表失败: {str(e)}'}
 
-    edit_fields = _extract_aspnet_fields(edit_html)
+    list_fields = _aspnet_fields(list_html)
 
-    result = {
-        'success': True,
-        'username': username,
-        'student_name': _extract_span_text(edit_html, 'Leave1_UserName') or '',
-        'holiday_name': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_HolidayName') or '',
-        'begin_date': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_BeginDate') or '',
-        'end_date': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_EndDate') or '',
-        'leave_begin_date': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_LeaveBeginDate') or '',
-        'leave_end_date': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_LeaveEndDate') or '',
-        'memo': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_Memo') or '',
-    }
+    # 解析节假日信息
+    holiday_name = _span_text(list_html, 'HolidayName')
+    status = _span_text(list_html, 'Status')
+    begin_date = _span_text(list_html, 'BeginDate')
+    end_date = _span_text(list_html, 'EndDate')
+    leave_begin = _span_text(list_html, 'LeaveBeginDate')
+    leave_end = _span_text(list_html, 'LeaveEndDate')
+    memo = _span_text(list_html, 'Memo')
 
-    # 缓存 session 供提交使用
+    # 解析历史记录
+    records = []
+    table = re.search(r'<table[^>]*id="GridView1"[^>]*>.*?</table>', list_html, re.DOTALL)
+    if table:
+        rows = re.findall(r'<tr[^>]*>.*?</tr>', table.group(), re.DOTALL)
+        for row in rows[1:]:
+            cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
+            if len(cells) >= 6:
+                # 第一个 cell 有链接，提取 Id
+                id_m = re.search(r'Id=(\d+)', cells[0])
+                student_id = re.sub(r'<[^>]+>', '', cells[0]).strip()
+                records.append({
+                    'id': id_m.group(1) if id_m else '',
+                    'student_id': student_id,
+                    'student_name': re.sub(r'<[^>]+>', '', cells[1]).strip(),
+                    'holiday': re.sub(r'<[^>]+>', '', cells[2]).strip(),
+                    'time_range': re.sub(r'<[^>]+>', '', cells[3]).strip(),
+                    'leave_type': re.sub(r'<[^>]+>', '', cells[4]).strip(),
+                    'destination': re.sub(r'<[^>]+>', '', cells[5]).strip(),
+                })
+
+    # 缓存 session 供后续新增/提交使用
     with _cache_lock:
         LOGIN_DATA_CACHE[username] = {
             'session': session,
-            'edit_viewstate': edit_fields.get('__VIEWSTATE', ''),
-            'edit_eventvalidation': edit_fields.get('__EVENTVALIDATION', ''),
-            'edit_viewstategenerator': edit_fields.get('__VIEWSTATEGENERATOR', ''),
+            'list_viewstate': list_fields.get('__VIEWSTATE', ''),
+            'list_eventvalidation': list_fields.get('__EVENTVALIDATION', ''),
+            'list_viewstategenerator': list_fields.get('__VIEWSTATEGENERATOR', ''),
         }
 
-    return result
+    return {
+        'success': True,
+        'username': username,
+        'holiday_name': holiday_name or '',
+        'status': status or '',
+        'begin_date': begin_date or '',
+        'end_date': end_date or '',
+        'leave_begin_date': leave_begin or '',
+        'leave_end_date': leave_end or '',
+        'memo': memo or '',
+        'records': records,
+        'record_count': len(records),
+    }
+
+
+def get_edit_form(username):
+    """
+    获取 StuLeave_Edit.aspx?Status=Add 页面（在登录后调用）。
+    返回 dict 包含表单 VIEWSTATE + 节假日信息。
+    """
+    with _cache_lock:
+        login_data = LOGIN_DATA_CACHE.get(username)
+
+    if not login_data:
+        return {'success': False, 'message': '请先登录'}
+
+    session = login_data['session']
+
+    try:
+        r = session.get(f'{BASE}/SystemForm/Leave/StuLeave_Edit.aspx?Status=Add', timeout=15)
+        edit_html = r.text
+    except Exception as e:
+        return {'success': False, 'message': f'获取编辑页失败: {str(e)}'}
+
+    f = _aspnet_fields(edit_html)
+
+    # 更新缓存中的编辑页 VIEWSTATE
+    with _cache_lock:
+        if LOGIN_DATA_CACHE.get(username):
+            LOGIN_DATA_CACHE[username]['edit_viewstate'] = f.get('__VIEWSTATE', '')
+            LOGIN_DATA_CACHE[username]['edit_eventvalidation'] = f.get('__EVENTVALIDATION', '')
+            LOGIN_DATA_CACHE[username]['edit_viewstategenerator'] = f.get('__VIEWSTATEGENERATOR', '')
+
+    return {
+        'success': True,
+        'student_name': _span_text(edit_html, 'Leave1_UserName') or '',
+        'holiday_name': _span_text(edit_html, 'LeaveNoHomeConfig1_HolidayName') or '',
+        'begin_date': _span_text(edit_html, 'LeaveNoHomeConfig1_BeginDate') or '',
+        'end_date': _span_text(edit_html, 'LeaveNoHomeConfig1_EndDate') or '',
+        'leave_begin_date': _span_text(edit_html, 'LeaveNoHomeConfig1_LeaveBeginDate') or '',
+        'leave_end_date': _span_text(edit_html, 'LeaveNoHomeConfig1_LeaveEndDate') or '',
+        'memo': _span_text(edit_html, 'LeaveNoHomeConfig1_Memo') or '',
+        'viewstate': f.get('__VIEWSTATE', ''),
+        'eventvalidation': f.get('__EVENTVALIDATION', ''),
+        'viewstategenerator': f.get('__VIEWSTATEGENERATOR', ''),
+    }
 
 
 def submit_leave(username, form_fields):
     """提交去向登记（复用 session）"""
     with _cache_lock:
-        login_data = LOGIN_DATA_CACHE.pop(username, None)
+        login_data = LOGIN_DATA_CACHE.get(username)
 
     if not login_data:
-        return False, '登录信息已过期'
+        return False, '请先登录'
 
     data = {
-        '__VIEWSTATE': login_data['edit_viewstate'],
-        '__VIEWSTATEGENERATOR': login_data['edit_viewstategenerator'],
+        '__VIEWSTATE': login_data.get('edit_viewstate', login_data.get('list_viewstate', '')),
+        '__VIEWSTATEGENERATOR': login_data.get('edit_viewstategenerator', login_data.get('list_viewstategenerator', '')),
         '__VIEWSTATEENCRYPTED': '',
-        '__EVENTVALIDATION': login_data['edit_eventvalidation'],
+        '__EVENTVALIDATION': login_data.get('edit_eventvalidation', login_data.get('list_eventvalidation', '')),
         '__EVENTTARGET': '', '__EVENTARGUMENT': '',
         '__SCROLLPOSITIONX': '0', '__SCROLLPOSITIONY': '0',
     }
     data.update(form_fields)
 
-    from urllib.parse import quote_plus
-    body = '&'.join(f"{quote_plus(k.encode('gb2312'))}={quote_plus(v.encode('gb2312'))}" for k, v in data.items())
-
     try:
         resp = login_data['session'].post(
             f'{BASE}/SystemForm/Leave/StuLeave_Edit.aspx?Status=Add',
-            data=body,
+            data=_gbk_form(data),
             headers={'Content-Type': 'application/x-www-form-urlencoded'},
             timeout=15)
         text = resp.text
@@ -222,7 +254,10 @@ def submit_leave(username, form_fields):
 if __name__ == '__main__':
     u = input("学号：")
     p = input("密码：")
-    r = login_and_get_form(u, p)
+    r = login_and_get_list(u, p)
     print(f"{'✅' if r['success'] else '❌'} {r.get('message', '')}")
     if r['success']:
-        print(f"  {r['holiday_name']} — {r['student_name']}")
+        print(f"  节假日: {r['holiday_name']} [{r['status']}]")
+        print(f"  记录: {r['record_count']} 条")
+        for rec in r['records'][:3]:
+            print(f"    {rec['holiday']} | {rec['leave_type']} | {rec['destination']}")

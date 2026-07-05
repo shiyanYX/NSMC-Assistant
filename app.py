@@ -162,7 +162,7 @@ def get_score():
 
 @app.route('/api/xg2/login', methods=['POST'])
 def xg2_login():
-    """登录 xg2 学工系统 + 获取节假日表单信息（验证码后端自动生成，无需前端传入）"""
+    """登录 xg2 + 获取去向登记列表页"""
     try:
         data = request.json
         username = data.get('username')
@@ -171,7 +171,7 @@ def xg2_login():
         if not username or not password:
             return jsonify({'success': False, 'message': '请提供学号和密码'}), 400
 
-        result = xg2_fetcher.login_and_get_form(username, password)
+        result = xg2_fetcher.login_and_get_list(username, password)
 
         if not result['success']:
             return jsonify({'success': False, 'message': result.get('message', 'xg2 登录失败')}), 401
@@ -180,6 +180,39 @@ def xg2_login():
             'success': True,
             'data': {
                 'username': username,
+                'holiday_name': result.get('holiday_name', ''),
+                'status': result.get('status', ''),
+                'begin_date': result.get('begin_date', ''),
+                'end_date': result.get('end_date', ''),
+                'leave_begin_date': result.get('leave_begin_date', ''),
+                'leave_end_date': result.get('leave_end_date', ''),
+                'memo': result.get('memo', ''),
+                'records': result.get('records', []),
+                'record_count': result.get('record_count', 0),
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'服务器错误: {str(e)}'}), 500
+
+
+@app.route('/api/xg2/edit-form', methods=['POST'])
+def xg2_edit_form():
+    """获取去向登记编辑页信息"""
+    try:
+        data = request.json
+        username = data.get('username')
+
+        if not username:
+            return jsonify({'success': False, 'message': '缺少用户信息'}), 400
+
+        result = xg2_fetcher.get_edit_form(username)
+
+        if not result['success']:
+            return jsonify({'success': False, 'message': result.get('message', '获取编辑页失败')}), 400
+
+        return jsonify({
+            'success': True,
+            'data': {
                 'student_name': result.get('student_name', ''),
                 'holiday_name': result.get('holiday_name', ''),
                 'begin_date': result.get('begin_date', ''),
