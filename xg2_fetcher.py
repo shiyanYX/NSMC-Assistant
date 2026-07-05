@@ -130,16 +130,13 @@ def _extract_span_text(html, span_id):
 
 
 def _gbk_form_body(form_dict):
-    """
-    ASP.NET 页面是 gb2312 编码，按钮值含中文。
-    手动用 GB2312 编码后构建 form-urlencoded body（空格转 +）。
-    """
-    import urllib.parse
+    """手动用 GB2312 编码构建 form-urlencoded body（空格 = +）。"""
+    import urllib.parse as up
     parts = []
     for key, value in form_dict.items():
-        key_q = urllib.parse.quote_from_bytes(key.encode('gb2312')).replace('%20', '+')
-        val_q = urllib.parse.quote_from_bytes(value.encode('gb2312')).replace('%20', '+')
-        parts.append(f'{key_q}={val_q}')
+        kq = up.quote_plus(key.encode('gb2312'))
+        vq = up.quote_plus(value.encode('gb2312'))
+        parts.append(f'{kq}={vq}')
     return '&'.join(parts)
 
 
@@ -163,7 +160,9 @@ def login_and_get_form(username, password):
 
     # 1. GET 登录页 → 获取 RSA 公钥 + VIEWSTATE
     try:
-        resp = session.get(f'{BASE}/UserLogin.aspx', timeout=15)
+        resp = session.get(f'{BASE}/UserLogin.aspx',
+                           headers={'Referer': 'https://xg2.nsmc.edu.cn/'},
+                           timeout=15)
         html = resp.text
     except Exception as e:
         return {'success': False, 'message': f'无法访问 xg2 登录页: {str(e)}'}
@@ -199,7 +198,11 @@ def login_and_get_form(username, password):
         login_resp = session.post(
             f'{BASE}/UserLogin.aspx',
             data=body,
-            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            headers={
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Referer': f'{BASE}/UserLogin.aspx',
+                'Origin': 'https://xg2.nsmc.edu.cn',
+            },
             timeout=15
         )
         login_html = login_resp.text
