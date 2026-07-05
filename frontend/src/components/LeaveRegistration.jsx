@@ -94,7 +94,7 @@ export default function LeaveRegistration({ account }) {
 
   // Login
   const handleLogin = async () => {
-    if (!xg2User||!xg2Pass) { setError('请输入 xg2 学号和密码'); return; }
+    if (!xg2User||!xg2Pass) { setError('请输入 学工号和密码'); return; }
     setLoading(true); setError('');
     if (rememberXg2) localStorage.setItem('xg2_saved_login', JSON.stringify({username:xg2User,password:xg2Pass}));
     else localStorage.removeItem('xg2_saved_login');
@@ -181,11 +181,11 @@ export default function LeaveRegistration({ account }) {
     <div className="lr-root">
       <div className="lr-login-card">
         <h2>节假日去向登记</h2>
-        <p className="lr-login-desc">请输入 xg2 学工系统的账号密码</p>
+        <p className="lr-login-desc">请输入学工系统的账号密码</p>
         {error&&<div className="msg msg-error">✗ {error}</div>}
-        <div className="lr-field-col"><label>xg2 学号</label><input value={xg2User} onChange={e=>setXg2User(e.target.value)} className="lr-input" placeholder="请输入学号"/></div>
-        <div className="lr-field-col"><label>xg2 密码</label><input type="password" value={xg2Pass} onChange={e=>setXg2Pass(e.target.value)} className="lr-input" placeholder="请输入密码"/></div>
-        <label className="lr-checkbox"><input type="checkbox" checked={rememberXg2} onChange={e=>setRememberXg2(e.target.checked)}/><span>记住 xg2 账号密码</span></label>
+        <div className="lr-field-col"><label>学工号</label><input value={xg2User} onChange={e=>setXg2User(e.target.value)} className="lr-input" placeholder="请输入学号"/></div>
+        <div className="lr-field-col"><label>密码</label><input type="password" value={xg2Pass} onChange={e=>setXg2Pass(e.target.value)} className="lr-input" placeholder="请输入密码"/></div>
+        <label className="lr-checkbox"><input type="checkbox" checked={rememberXg2} onChange={e=>setRememberXg2(e.target.checked)}/><span>记住账号密码</span></label>
         <button className="btn btn-primary lr-btn-full" disabled={loading} onClick={handleLogin}>{loading?'登录中...':'开始登记'}</button>
       </div>
       <style>{CSS}</style>
