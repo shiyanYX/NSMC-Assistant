@@ -161,56 +161,33 @@ def get_score():
             'message': f'服务器错误: {str(e)}'
         }), 500
 
-@app.route('/api/xg2/prepare', methods=['POST'])
-def xg2_prepare():
-    """准备 xg2 登录，返回 RSA 公钥 + 验证码 + 隐藏字段"""
-    try:
-        data = xg2_fetcher.prepare_login()
-        return jsonify({'success': True, 'data': data})
-    except Exception as e:
-        return jsonify({'success': False, 'message': f'服务器错误: {str(e)}'}), 500
-
-
 @app.route('/api/xg2/login', methods=['POST'])
 def xg2_login():
-    """登录 xg2 学工系统 + 获取节假日表单信息"""
+    """登录 xg2 学工系统 + 获取节假日表单信息（验证码后端自动生成，无需前端传入）"""
     try:
         data = request.json
         username = data.get('username')
         password = data.get('password')
-        captcha = data.get('captcha')
 
-        if not username or not password or not captcha:
-            return jsonify({'success': False, 'message': '请提供学号、密码和验证码'}), 400
+        if not username or not password:
+            return jsonify({'success': False, 'message': '请提供学号和密码'}), 400
 
-        # 先准备（如果需要首次 session）
-        prep = xg2_fetcher.prepare_login()
+        result = xg2_fetcher.login_and_get_form(username, password)
 
-        ok, session, err = xg2_fetcher.do_login(
-            username, password, captcha,
-            prep['viewstate'], prep['eventvalidation'],
-            prep.get('viewstategenerator', ''), prep['rsa_modulus']
-        )
-        if not ok:
-            return jsonify({'success': False, 'message': err or 'xg2 登录失败'}), 401
-
-        # 获取节假日表单
-        form = xg2_fetcher.get_leave_form(session)
+        if not result['success']:
+            return jsonify({'success': False, 'message': result.get('message', 'xg2 登录失败')}), 401
 
         return jsonify({
             'success': True,
             'data': {
                 'username': username,
-                'student_name': form.get('student_name', ''),
-                'holiday_name': form.get('holiday_name', ''),
-                'begin_date': form.get('begin_date', ''),
-                'end_date': form.get('end_date', ''),
-                'leave_begin_date': form.get('leave_begin_date', ''),
-                'leave_end_date': form.get('leave_end_date', ''),
-                'memo': form.get('memo', ''),
-                'viewstate': form.get('viewstate', ''),
-                'eventvalidation': form.get('eventvalidation', ''),
-                'viewstategenerator': form.get('viewstategenerator', ''),
+                'student_name': result.get('student_name', ''),
+                'holiday_name': result.get('holiday_name', ''),
+                'begin_date': result.get('begin_date', ''),
+                'end_date': result.get('end_date', ''),
+                'leave_begin_date': result.get('leave_begin_date', ''),
+                'leave_end_date': result.get('leave_end_date', ''),
+                'memo': result.get('memo', ''),
             }
         })
     except Exception as e:
@@ -219,37 +196,16 @@ def xg2_login():
 
 @app.route('/api/xg2/submit', methods=['POST'])
 def xg2_submit():
-    """提交节假日去向登记"""
+    """提交节假日去向登记（复用登录 session）"""
     try:
         data = request.json
         username = data.get('username')
-        password = data.get('password')
-        captcha = data.get('captcha')
         form_fields = data.get('form_fields', {})
 
-        if not username or not password or not form_fields:
+        if not username or not form_fields:
             return jsonify({'success': False, 'message': '缺少必要参数'}), 400
 
-        # 重新登录（获取 session + VIEWSTATE）
-        prep = xg2_fetcher.prepare_login()
-        ok, session, err = xg2_fetcher.do_login(
-            username, password, captcha or 'test',
-            prep['viewstate'], prep['eventvalidation'],
-            prep.get('viewstategenerator', ''), prep['rsa_modulus']
-        )
-        if not ok:
-            return jsonify({'success': False, 'message': err or 'xg2 登录失败'}), 401
-
-        # 获取编辑页以获取 VIEWSTATE
-        form = xg2_fetcher.get_leave_form(session)
-
-        # 提交表单
-        ok, msg = xg2_fetcher.submit_leave(
-            session, form_fields,
-            form.get('viewstate', ''),
-            form.get('eventvalidation', ''),
-            form.get('viewstategenerator', ''),
-        )
+        ok, msg = xg2_fetcher.submit_leave(username, form_fields)
 
         return jsonify({
             'success': ok,

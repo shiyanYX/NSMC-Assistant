@@ -3,7 +3,7 @@ xg2 学工系统（xg2.nsmc.edu.cn）登录 + 节假日去向登记
 
 核心难点：
   1. RSA 加密（JS 自定义 PKCS#1 v1.5 padding，消息字节逆序）
-  2. 验证码全程客户端生成，无需 OCR
+  2. 验证码全程客户端生成，无服务端校验，后端可自动填充
   3. ASP.NET WebForms __VIEWSTATE 机制
   4. 登录后 session 通过 Cookie 维持
 """
@@ -33,7 +33,7 @@ def _make_session():
     return s
 
 
-def generate_captcha():
+def _generate_captcha():
     """生成 4 位验证码文字（与 login.js 一致）"""
     return ''.join(random.choice(CAPTCHA_CHARS) for _ in range(4))
 
@@ -102,9 +102,6 @@ def _extract_aspnet_fields(html):
         (r'name="__VIEWSTATE"[^>]*value="([^"]*)"', '__VIEWSTATE'),
         (r'name="__EVENTVALIDATION"[^>]*value="([^"]*)"', '__EVENTVALIDATION'),
         (r'name="__VIEWSTATEGENERATOR"[^>]*value="([^"]*)"', '__VIEWSTATEGENERATOR'),
-        (r'id="__VIEWSTATE"[^>]*value="([^"]*)"', '__VIEWSTATE'),
-        (r'id="__EVENTVALIDATION"[^>]*value="([^"]*)"', '__EVENTVALIDATION'),
-        (r'id="__VIEWSTATEGENERATOR"[^>]*value="([^"]*)"', '__VIEWSTATEGENERATOR'),
     ]
     for pattern, key in patterns:
         m = re.search(pattern, html)
@@ -115,182 +112,10 @@ def _extract_aspnet_fields(html):
 
 def _extract_rsa_modulus(html):
     """从登录页面 HTML 中提取 RSA 模数（每次不同）"""
-    # 查找 cmdEncrypt() 中的 new RSAKeyPair 调用
     m = re.search(r'new RSAKeyPair\("([^"]+)",\s*"([^"]*)",\s*"([^"]+)"\)', html)
     if m:
         return m.group(3)  # modulus 是第三个参数
     return None
-
-
-# ====== 公开 API ======
-
-def prepare_login():
-    """
-    第 1 步：访问登录页，提取 RSA 公钥 + ASP.NET 隐藏字段，生成验证码。
-    返回 dict:
-      - captcha: 验证码文字（前端展示用）
-      - viewstate/hid: ASP.NET 隐藏字段
-      - rsa_modulus: RSA 模数（hex）
-    """
-    session = _make_session()
-    resp = session.get(f'{BASE}/UserLogin.aspx', timeout=15)
-    html = resp.text
-
-    fields = _extract_aspnet_fields(html)
-    modulus = _extract_rsa_modulus(html)
-    captcha = generate_captcha()
-
-    return {
-        'captcha': captcha,
-        'viewstate': fields.get('__VIEWSTATE', ''),
-        'eventvalidation': fields.get('__EVENTVALIDATION', ''),
-        'viewstategenerator': fields.get('__VIEWSTATEGENERATOR', ''),
-        'rsa_modulus': modulus or '',
-    }
-
-
-def do_login(username, password, captcha, viewstate, eventvalidation, viewstategenerator, rsa_modulus, session=None):
-    """
-    第 2 步：执行登录 POST，成功返回 session。
-    返回 (success, session, error_msg)
-    """
-    if not session:
-        session = _make_session()
-
-    # 先 GET 一次初始化 cookie
-    session.get(f'{BASE}/UserLogin.aspx', timeout=15)
-
-    # RSA 加密凭证
-    encrypted = _rsa_encrypt(username, password, rsa_modulus)
-
-    form_data = {
-        '__LASTFOCUS': '',
-        '__EVENTTARGET': '',
-        '__EVENTARGUMENT': '',
-        '__VIEWSTATE': viewstate,
-        '__VIEWSTATEGENERATOR': viewstategenerator,
-        '__VIEWSTATEENCRYPTED': '',
-        '__EVENTVALIDATION': eventvalidation,
-        'UserName': '******',
-        'posx': encrypted,
-        'codeInput': captcha,
-        'queryBtn': '登          录',
-    }
-
-    resp = session.post(f'{BASE}/UserLogin.aspx', data=form_data, timeout=15)
-
-    # 登录成功标志：响应中包含 Navigation.aspx 的跳转或非登录页内容
-    if 'Navigation.aspx' in resp.text or 'MainFrame.aspx' in resp.text:
-        return True, session, None
-
-    # 尝试找错误信息
-    msg_match = re.search(r'alert\([\'"]([^\'"]+)[\'"]\)', resp.text)
-    if msg_match:
-        return False, session, msg_match.group(1)
-
-    return False, session, '登录失败，请检查学号、密码或验证码'
-
-
-def get_leave_form(session):
-    """
-    第 3 步：获取节假日去向编辑页面。
-    返回 dict:
-      - holiday_name: 节假日名称
-      - begin_date / end_date: 放假起止
-      - leave_begin_date / leave_end_date: 登记起止
-      - memo: 备注
-      - viewstate / eventvalidation: 提交时需要的隐藏字段
-      - student_name: 学生姓名
-      - edit_url: 编辑页完整 URL
-    """
-    edit_url = f'{BASE}/SystemForm/Leave/StuLeave_Edit.aspx?Status=Add'
-    resp = session.get(edit_url, timeout=15)
-    html = resp.text
-
-    fields = _extract_aspnet_fields(html)
-
-    # 提取节假日信息
-    holiday_name = _extract_span_text(html, 'LeaveNoHomeConfig1_HolidayName')
-    begin_date = _extract_span_text(html, 'LeaveNoHomeConfig1_BeginDate')
-    end_date = _extract_span_text(html, 'LeaveNoHomeConfig1_EndDate')
-    leave_begin = _extract_span_text(html, 'LeaveNoHomeConfig1_LeaveBeginDate')
-    leave_end = _extract_span_text(html, 'LeaveNoHomeConfig1_LeaveEndDate')
-    memo = _extract_span_text(html, 'LeaveNoHomeConfig1_Memo')
-    student_name = _extract_span_text(html, 'Leave1_UserName')
-
-    return {
-        'holiday_name': holiday_name or '',
-        'begin_date': begin_date or '',
-        'end_date': end_date or '',
-        'leave_begin_date': leave_begin or '',
-        'leave_end_date': leave_end or '',
-        'memo': memo or '',
-        'student_name': student_name or '',
-        'viewstate': fields.get('__VIEWSTATE', ''),
-        'eventvalidation': fields.get('__EVENTVALIDATION', ''),
-        'viewstategenerator': fields.get('__VIEWSTATEGENERATOR', ''),
-        'edit_url': edit_url,
-    }
-
-
-def submit_leave(session, form_fields, viewstate, eventvalidation, viewstategenerator):
-    """
-    第 4 步：提交去向登记表单。
-    form_fields 示例：
-    {
-        'Leave1$LeaveBeginDate': '2026-07-01',
-        'Leave1$LeaveBeginTime': '08',
-        'Leave1$LeaveEndDate': '2026-07-20',
-        'Leave1$LeaveEndTime': '18',
-        'Leave1$LeaveType': '02045003',  # 返家
-        'Leave1$LeaveThing': '暑假回家',
-        'Leave1$CTAreaBox1_ProvinceHid': '510000',  # 四川
-        'Leave1$CTAreaBox1_CityHid': '510100',      # 成都
-        'Leave1$OutAddress': '详细地址',
-        'Leave1$IsTellRbl': '1',  # 已告知家长
-        'Leave1$WithNumNo': '0',
-        'Leave1$JHRName': '家长姓名',
-        'Leave1$JHRPhone': '13800138000',
-        'Leave1$OutTel': '',
-        'Leave1$OutMoveTel': '13900139000',
-        'Leave1$Relation': '父子',
-        'Leave1$OutName': '联系人姓名',
-        'Leave1$StuMoveTel': '13700137000',
-        'Leave1$StuOtherTel': '',
-        'Leave1$GoDate': '2026-07-01',
-        'Leave1$GoTime': '08',
-        'Leave1$GoVehicle': '火车',
-        'Leave1$BackDate': '2026-08-28',
-        'Leave1$BackTime': '12',
-        'Leave1$BackVehicle': '火车',
-    }
-    """
-    data = {
-        '__VIEWSTATE': viewstate,
-        '__VIEWSTATEGENERATOR': viewstategenerator,
-        '__VIEWSTATEENCRYPTED': '',
-        '__EVENTVALIDATION': eventvalidation,
-        '__EVENTTARGET': '',
-        '__EVENTARGUMENT': '',
-        '__SCROLLPOSITIONX': '0',
-        '__SCROLLPOSITIONY': '0',
-    }
-    data.update(form_fields)
-
-    # 提交 URL（与编辑页相同）
-    edit_url = f'{BASE}/SystemForm/Leave/StuLeave_Edit.aspx?Status=Add'
-
-    resp = session.post(edit_url, data=data, timeout=15)
-    text = resp.text
-
-    # 通过响应判断成功
-    if '保存成功' in text or '提交成功' in text:
-        return True, '提交成功'
-    # 尝试提取错误
-    msg_match = re.search(r"alert\(['\x22]([^'\x22]+)['\x22]\)", text)
-    if msg_match:
-        return False, msg_match.group(1)
-    return True, '已提交（请确认）'
 
 
 def _extract_span_text(html, span_id):
@@ -301,44 +126,167 @@ def _extract_span_text(html, span_id):
     return ''
 
 
+# ====== 公开 API ======
+# 验证码纯客户端生成、服务端不校验，后端直接自动生成并填好，前端无需用户输入
+
+LOGIN_DATA_CACHE = {}
+
+
+def login_and_get_form(username, password):
+    """
+    完整流程：登录 xg2 → 获取节假日去向登记表。
+
+    返回 dict:
+      - success: bool
+      - 成功时：holiday_name, begin_date, end_date, leave_begin_date, leave_end_date,
+                 memo, student_name, login_data（提交时需传回）
+      - 失败时：message
+    """
+    session = _make_session()
+
+    # 1. GET 登录页 → 获取 RSA 公钥 + VIEWSTATE
+    try:
+        resp = session.get(f'{BASE}/UserLogin.aspx', timeout=15)
+        html = resp.text
+    except Exception as e:
+        return {'success': False, 'message': f'无法访问 xg2 登录页: {str(e)}'}
+
+    modulus = _extract_rsa_modulus(html)
+    fields = _extract_aspnet_fields(html)
+
+    if not modulus:
+        return {'success': False, 'message': '未能获取 RSA 公钥'}
+
+    # 2. 自动生成验证码（服务端不校验，纯客户端 JS 行为）
+    captcha = _generate_captcha()
+
+    # 3. RSA 加密并 POST 登录
+    try:
+        encrypted = _rsa_encrypt(username, password, modulus)
+
+        form_data = {
+            '__LASTFOCUS': '',
+            '__EVENTTARGET': '',
+            '__EVENTARGUMENT': '',
+            '__VIEWSTATE': fields.get('__VIEWSTATE', ''),
+            '__VIEWSTATEGENERATOR': fields.get('__VIEWSTATEGENERATOR', ''),
+            '__VIEWSTATEENCRYPTED': '',
+            '__EVENTVALIDATION': fields.get('__EVENTVALIDATION', ''),
+            'UserName': '******',
+            'posx': encrypted,
+            'codeInput': captcha,
+            'queryBtn': '登          录',
+        }
+
+        login_resp = session.post(f'{BASE}/UserLogin.aspx', data=form_data, timeout=15)
+        login_html = login_resp.text
+    except Exception as e:
+        return {'success': False, 'message': f'登录请求失败: {str(e)}'}
+
+    # 检查登录是否成功
+    if 'Navigation.aspx' not in login_html and 'MainFrame.aspx' not in login_html:
+        msg_match = re.search(r"alert\(['\"]([^'\"]+)['\"]\)", login_html)
+        err_msg = msg_match.group(1) if msg_match else 'xg2 登录失败，请检查学号和密码'
+        return {'success': False, 'message': err_msg}
+
+    # 4. 登录成功 → 获取节假日去向编辑页面
+    try:
+        edit_url = f'{BASE}/SystemForm/Leave/StuLeave_Edit.aspx?Status=Add'
+        edit_resp = session.get(edit_url, timeout=15)
+        edit_html = edit_resp.text
+    except Exception as e:
+        return {'success': False, 'message': f'获取去向登记表失败: {str(e)}'}
+
+    edit_fields = _extract_aspnet_fields(edit_html)
+
+    result = {
+        'success': True,
+        'username': username,
+        'student_name': _extract_span_text(edit_html, 'Leave1_UserName') or '',
+        'holiday_name': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_HolidayName') or '',
+        'begin_date': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_BeginDate') or '',
+        'end_date': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_EndDate') or '',
+        'leave_begin_date': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_LeaveBeginDate') or '',
+        'leave_end_date': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_LeaveEndDate') or '',
+        'memo': _extract_span_text(edit_html, 'LeaveNoHomeConfig1_Memo') or '',
+    }
+
+    # 缓存登录信息供后续提交使用
+    import threading
+    _cache_lock = threading.Lock()
+    with _cache_lock:
+        global LOGIN_DATA_CACHE
+        LOGIN_DATA_CACHE[username] = {
+            'session': session,
+            'edit_viewstate': edit_fields.get('__VIEWSTATE', ''),
+            'edit_eventvalidation': edit_fields.get('__EVENTVALIDATION', ''),
+            'edit_viewstategenerator': edit_fields.get('__VIEWSTATEGENERATOR', ''),
+        }
+
+    return result
+
+
+def submit_leave(username, form_fields):
+    """
+    提交去向登记（复用之前缓存的登录 session）。
+    返回 (success, message)
+    """
+    import threading
+    _cache_lock = threading.Lock()
+    with _cache_lock:
+        login_data = LOGIN_DATA_CACHE.pop(username, None)
+
+    if not login_data:
+        return False, '登录信息已过期，请重新登录'
+
+    session = login_data['session']
+
+    data = {
+        '__VIEWSTATE': login_data['edit_viewstate'],
+        '__VIEWSTATEGENERATOR': login_data['edit_viewstategenerator'],
+        '__VIEWSTATEENCRYPTED': '',
+        '__EVENTVALIDATION': login_data['edit_eventvalidation'],
+        '__EVENTTARGET': '',
+        '__EVENTARGUMENT': '',
+        '__SCROLLPOSITIONX': '0',
+        '__SCROLLPOSITIONY': '0',
+    }
+    data.update(form_fields)
+
+    try:
+        edit_url = f'{BASE}/SystemForm/Leave/StuLeave_Edit.aspx?Status=Add'
+        resp = session.post(edit_url, data=data, timeout=15)
+        text = resp.text
+    except Exception as e:
+        return False, f'提交请求失败: {str(e)}'
+
+    if '保存成功' in text or '提交成功' in text:
+        return True, '提交成功'
+    msg_match = re.search(r"alert\(['\x22]([^'\x22]+)['\x22]\)", text)
+    if msg_match:
+        return False, msg_match.group(1)
+    return True, '已提交'
+
 
 # ====== CLI 测试 ======
 if __name__ == '__main__':
-    import json
+    username = input("学号：")
+    password = input("密码：")
 
-    print("=== xg2 节假日去向登记 测试 ===")
-
-    # 1. 准备
-    print("\n[1] 准备登录...")
-    prep = prepare_login()
-    print(f"  验证码: {prep['captcha']}")
-    print(f"  RSA Modulus: {prep['rsa_modulus'][:40]}...")
-    print(f"  VIEWSTATE 长度: {len(prep.get('viewstate', ''))}")
-
-    # 手动输入验证码（测试用）
-    captcha = input(f"  请输入验证码 [{prep['captcha']}]：") or prep['captcha']
-
-    username = input("  学号：")
-    password = input("  密码：")
-
-    # 2. 登录
-    print("\n[2] 登录 xg2...")
-    ok, sess, err = do_login(
-        username, password, captcha,
-        prep['viewstate'], prep['eventvalidation'],
-        prep.get('viewstategenerator', ''), prep['rsa_modulus']
-    )
-    if not ok:
-        print(f"  ❌ 登录失败: {err}")
+    print("\n[1] 登录 xg2...")
+    result = login_and_get_form(username, password)
+    if not result['success']:
+        print(f"失败: {result['message']}")
         exit(1)
-    print("  ✅ 登录成功")
 
-    # 3. 获取表单
-    print("\n[3] 获取去向编辑表单...")
-    form = get_leave_form(sess)
-    print(f"  节假日: {form['holiday_name']}")
-    print(f"  起止: {form['begin_date']} ~ {form['end_date']}")
-    print(f"  学生: {form['student_name']}")
-    print(f"  VIEWSTATE 长度: {len(form.get('viewstate', ''))}")
+    print(f"✅ 登录成功")
+    print(f"  节假日: {result['holiday_name']}")
+    print(f"  起止: {result['begin_date']} ~ {result['end_date']}")
+    print(f"  学生: {result['student_name']}")
 
-    print("\n✅ 测试通过")
+    print("\n[2] 提交测试（空表单，实际应填充完整字段）...")
+    ok, msg = submit_leave(username, {
+        'Leave1$LeaveBeginDate': result['begin_date'],
+        'Leave1$LeaveThing': '回家',
+    })
+    print(f"  {'✅' if ok else '❌'} {msg}")
