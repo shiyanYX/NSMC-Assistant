@@ -230,19 +230,21 @@ def submit_leave(username, form_fields):
         '__VIEWSTATEGENERATOR': login_data.get('edit_viewstategenerator', login_data.get('list_viewstategenerator', '')),
         '__VIEWSTATEENCRYPTED': '',
         '__EVENTVALIDATION': login_data.get('edit_eventvalidation', login_data.get('list_eventvalidation', '')),
-        '__EVENTTARGET': '', '__EVENTARGUMENT': '',
+        '__EVENTTARGET': 'Save',
+        '__EVENTARGUMENT': '',
+        '__LASTFOCUS': '',
         '__SCROLLPOSITIONX': '0', '__SCROLLPOSITIONY': '0',
     }
     data.update(form_fields)
 
-    # ASP.NET 日期验证需要 hidden 字段 Leave1_LeaveBeginDate2 和 Leave1_LeaveEndDate2
-    # 页面的 JS getDateDiff() 比较用户输入和这两个字段的值，不在范围内就报错
-    # 这些字段在页面底部：<input name="Leave1$LeaveBeginDate2" type="hidden" .../>
-    # 注意！field_name 中的 $ 在 regex 中不需要转义（re.escape 会处理）
+    # 确保 __EVENTTARGET = Save 触发服务器端按钮事件
+    # 页面 JS: __doPostBack('Save', '') -> ASP.NET 识别 Save 按钮点击
+    data['__EVENTTARGET'] = 'Save'
+    data['__EVENTARGUMENT'] = ''
+
     import re as _re
     html_sources = [login_data.get('edit_html'), login_data.get('list_html')]
     for src in html_sources:
-        if not src: continue
         for suffix in ['LeaveBeginDate2', 'LeaveEndDate2']:
             field_name = f'Leave1${suffix}'
             if field_name not in data:
