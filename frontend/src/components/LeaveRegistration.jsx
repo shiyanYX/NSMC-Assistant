@@ -61,26 +61,6 @@ export default function LeaveRegistration({ account }) {
     } catch(_) {}
   }, [xg2User]);
 
-  // 表单页时获取编辑页信息
-  const loadedRef = React.useRef(false);
-  React.useEffect(() => {
-    if (page !== 'form' || loadedRef.current) return;
-    loadedRef.current = true;
-    (async () => {
-      try {
-        const r = await fetch('http://localhost:5000/api/xg2/edit-form', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:xg2User})});
-        const d = await r.json();
-        if (d.success) {
-          setEditInfo(d.data);
-          sets('leaveBeginDate', d.data.begin_date||'');
-          sets('leaveEndDate', d.data.end_date||'');
-          sets('goDate', d.data.begin_date||'');
-          sets('backDate', d.data.end_date||'');
-        }
-      } catch(_) {}
-    })();
-  }, [page]);
-
   // Login
   const handleLogin = async () => {
     if (!xg2User||!xg2Pass) { setError('请输入 xg2 学号和密码'); return; }
@@ -93,7 +73,6 @@ export default function LeaveRegistration({ account }) {
       if (!d.success) { setError(d.message||'获取编辑页失败'); return; }
       const info = d.data;
       setListData(info);
-      // Pre-fill dates on list page load already
       setLoggedIn(true);
     } catch(e) { setError('网络错误: '+e.message); }
     finally { setLoading(false); }
