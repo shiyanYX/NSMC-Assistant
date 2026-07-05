@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AREA_DATA from './areaData';
 
 const LEAVE_TYPES = [
   { value: '02045001', label: '求职' }, { value: '02045002', label: '实习' },
@@ -11,7 +12,8 @@ const HOURS = Array.from({ length: 24 }, (_, i) => ({ value: String(i).padStart(
 const PEOPLE_COUNT = Array.from({ length: 31 }, (_, i) => ({ value: String(i), label: `${i}人` }));
 const DEFAULT_FORM = {
   leaveBeginDate: '', leaveBeginTime: '08', leaveEndDate: '', leaveEndTime: '18',
-  leaveType: '02045003', leaveThing: '', outAddress: '', isTellRbl: '1', withNumNo: '0',
+  leaveType: '02045003', leaveThing: '', province: '', city: '', district: '', outAddress: '',
+  isTellRbl: '1', withNumNo: '0',
   jhrName: '', jhrPhone: '', outTel: '', outMoveTel: '', relation: '', outName: '',
   stuMoveTel: '', stuOtherTel: '', goDate: '', goTime: '08', goVehicle: '汽车',
   backDate: '', backTime: '18', backVehicle: '汽车',
@@ -32,6 +34,31 @@ function Row({children}){return <div className="lr-field-row">{children}</div>;}
 function Col({label,children}){return <div className="lr-field-col"><label>{label}</label>{children}</div>;}
 function D({v,onChange,type,p,w,s}){return <input type={type||'text'} value={v} onChange={e=>onChange(e.target.value)} placeholder={p} className="lr-input" style={{width:w||150,...s}}/>;}
 function Sel({v,onChange,o}){return <select value={v} onChange={e=>onChange(e.target.value)} className="lr-select lr-select-sm">{o.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select>;}
+
+// 省市区选择器
+function AreaPicker({province, city, district, onProvChange, onCityChange, onDistChange}) {
+  const provs = AREA_DATA.map(p=>({value:p.code, label:p.name}));
+  const cities = province ? (AREA_DATA.find(p=>p.code===province)?.children||[]).map(c=>({value:c.code, label:c.name})) : [];
+  const dists = (province && city)
+    ? ((AREA_DATA.find(p=>p.code===province)?.children||[]).find(c=>c.code===city)?.children||[]).map(d=>({value:d.code, label:d.name}))
+    : [];
+  return (
+    <span className="area-picker">
+      <select value={province} onChange={e=>{onProvChange(e.target.value); onCityChange(''); onDistChange('');}} className="lr-select">
+        <option value="">选择省</option>
+        {provs.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
+      </select>
+      <select value={city} onChange={e=>{onCityChange(e.target.value); onDistChange('');}} className="lr-select">
+        <option value="">选择市</option>
+        {cities.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}
+      </select>
+      {dists.length>0&&<select value={district} onChange={e=>onDistChange(e.target.value)} className="lr-select">
+        <option value="">选择区</option>
+        {dists.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}
+      </select>}
+    </span>
+  );
+}
 
 export default function LeaveRegistration({ account }) {
   const [loading, setLoading] = useState(false);
@@ -104,7 +131,7 @@ export default function LeaveRegistration({ account }) {
         'Leave1$LeaveBeginDate':form.leaveBeginDate,'Leave1$LeaveBeginTime':form.leaveBeginTime,
         'Leave1$LeaveEndDate':form.leaveEndDate,'Leave1$LeaveEndTime':form.leaveEndTime,
         'Leave1$LeaveType':form.leaveType,'Leave1$LeaveThing':form.leaveThing,
-        'Leave1$CTAreaBox1_ProvinceHid':'','Leave1$CTAreaBox1_CityHid':'','Leave1$CTAreaBox1_AreaHid':'',
+        'Leave1$CTAreaBox1_ProvinceHid':form.province,'Leave1$CTAreaBox1_CityHid':form.city,'Leave1$CTAreaBox1_AreaHid':form.district,
         'Leave1$OutAddress':form.outAddress,'Leave1$IsTellRbl':form.isTellRbl,'Leave1$WithNumNo':form.withNumNo,
         'Leave1$JHRName':form.jhrName,'Leave1$JHRPhone':form.jhrPhone,
         'Leave1$OutTel':form.outTel,'Leave1$OutMoveTel':form.outMoveTel,
@@ -199,7 +226,11 @@ export default function LeaveRegistration({ account }) {
 
       <Sect title="去向时间"><span className="req">*</span><Row>开始 <D v={form.leaveBeginDate} onChange={v=>sets('leaveBeginDate',v)} type="date"/> <Sel v={form.leaveBeginTime} onChange={v=>sets('leaveBeginTime',v)} o={HOURS}/> 至 <D v={form.leaveEndDate} onChange={v=>sets('leaveEndDate',v)} type="date"/> <Sel v={form.leaveEndTime} onChange={v=>sets('leaveEndTime',v)} o={HOURS}/> {duration&&<span className="lr-duration">共 {duration}</span>}</Row></Sect>
       <Sect title="去向事由类型"><span className="req">*</span><Row>{LEAVE_TYPES.map(lt=><label key={lt.value} className="lr-radio-label"><input type="radio" checked={form.leaveType===lt.value} onChange={()=>sets('leaveType',lt.value)}/>{lt.label}</label>)}</Row></Sect>
-      <Sect title="去向地点"><span className="req">*</span><Row><D v={form.outAddress} onChange={v=>sets('outAddress',v)} p="省/市/区 + 详细地址" s={{flex:1}}/></Row></Sect>
+      <Sect title="去向地点"><span className="req">*</span><Row>
+        <AreaPicker province={form.province} city={form.city} district={form.district}
+          onProvChange={v=>sets('province',v)} onCityChange={v=>sets('city',v)} onDistChange={v=>sets('district',v)}/>
+        <D v={form.outAddress} onChange={v=>sets('outAddress',v)} p="详细地址" s={{flex:1}}/>
+      </Row></Sect>
       <Sect title="其他信息（选填）"><Row>已告知家长 <label className="lr-radio-label"><input type="radio" checked={form.isTellRbl==='1'} onChange={()=>sets('isTellRbl','1')}/>是</label><label className="lr-radio-label"><input type="radio" checked={form.isTellRbl==='0'} onChange={()=>sets('isTellRbl','0')}/>否</label> 同行人数 <Sel v={form.withNumNo} onChange={v=>sets('withNumNo',v)} o={PEOPLE_COUNT}/></Row></Sect>
       <Sect title="家长或监护人信息">
         <Row><span className="req">*</span>姓名 <D v={form.jhrName} onChange={v=>sets('jhrName',v)} w={130}/> <span className="req">*</span>联系电话 <D v={form.jhrPhone} onChange={v=>sets('jhrPhone',v)} w={130}/></Row>
@@ -255,6 +286,8 @@ const CSS = `
 .lr-select{cursor:pointer}
 .lr-select-sm{width:60px}
 .lr-textarea{width:100%;resize:vertical;font:13px/1.4 var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border);border-radius:4px;outline:none;padding:5px 7px}
+.area-picker{display:inline-flex;gap:4px}
+.area-picker select{width:auto;min-width:80px}
 .lr-radio-label{display:inline-flex;align-items:center;gap:2px;cursor:pointer;font-size:13px;padding:1px 5px;border-radius:4px}
 .lr-radio-label input{accent-color:var(--accent)}
 .lr-duration{font-size:12px;color:var(--accent);font-weight:500}
