@@ -70,7 +70,13 @@ export default function LeaveRegistration({ account }) {
       try {
         const r = await fetch('http://localhost:5000/api/xg2/edit-form', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:xg2User})});
         const d = await r.json();
-        if (d.success) setEditInfo(d.data);
+        if (d.success) {
+          setEditInfo(d.data);
+          sets('leaveBeginDate', d.data.begin_date||'');
+          sets('leaveEndDate', d.data.end_date||'');
+          sets('goDate', d.data.begin_date||'');
+          sets('backDate', d.data.end_date||'');
+        }
       } catch(_) {}
     })();
   }, [page]);
@@ -84,8 +90,11 @@ export default function LeaveRegistration({ account }) {
     try {
       const r = await fetch('http://localhost:5000/api/xg2/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:xg2User,password:xg2Pass})});
       const d = await r.json();
-      if (!d.success) { setError(d.message||'xg2 登录失败'); return; }
-      setListData(d.data); setLoggedIn(true);
+      if (!d.success) { setError(d.message||'获取编辑页失败'); return; }
+      const info = d.data;
+      setListData(info);
+      // Pre-fill dates on list page load already
+      setLoggedIn(true);
     } catch(e) { setError('网络错误: '+e.message); }
     finally { setLoading(false); }
   };
@@ -97,6 +106,7 @@ export default function LeaveRegistration({ account }) {
       const r = await fetch('http://localhost:5000/api/xg2/edit-form', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:xg2User})});
       const d = await r.json();
       if (!d.success) { setError(d.message||'获取编辑页失败'); return; }
+      setEditInfo(d.data);
       sets('leaveBeginDate', d.data.begin_date||'');
       sets('leaveEndDate', d.data.end_date||'');
       sets('goDate', d.data.begin_date||'');
