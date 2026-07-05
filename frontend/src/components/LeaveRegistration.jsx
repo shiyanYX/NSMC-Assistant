@@ -218,34 +218,134 @@ export default function LeaveRegistration({ account }) {
       {error&&<div className="msg msg-error">✗ {error}</div>}
       {showTpl&&tplDialog}
 
-      {/* 节假日信息参考 */}
-      {listData&&<div className="lr-info-card" style={{marginBottom:12}}>
-        <div className="lr-info-title">{listData.holiday_name||'节假日信息'}</div>
-        <div className="lr-info-row"><span>放假：{listData.begin_date||'-'} ~ {listData.end_date||'-'}</span><span>登记截止：{listData.leave_end_date||'-'}</span></div>
-        {listData.memo&&<div className="lr-info-memo">{listData.memo}</div>}
-      </div>}
+      {/* 节假日信息 */}
+      <table className="lr-official-table"><tbody>
+        <tr><td colSpan={4} className="lr-ot-title">节假日信息</td></tr>
+        <tr><td className="lr-ot-label" style={{width:'15%'}}>节假日名称：</td><td colSpan={3} className="lr-ot-value">{listData?.holiday_name||''}</td></tr>
+        <tr><td className="lr-ot-label" style={{width:'15%'}}>放假开始日期：</td><td style={{width:'35%'}} className="lr-ot-value">{listData?.begin_date||''}</td>
+            <td className="lr-ot-label" style={{width:'15%'}}>放假结束日期：</td><td style={{width:'35%'}} className="lr-ot-value">{listData?.end_date||''}</td></tr>
+        <tr><td className="lr-ot-label">去向登记开始日期：</td><td className="lr-ot-value">{listData?.leave_begin_date||''}</td>
+            <td className="lr-ot-label">去向登记截止日期：</td><td className="lr-ot-value">{listData?.leave_end_date||''}</td></tr>
+        <tr><td className="lr-ot-label">备注：</td><td colSpan={3} className="lr-ot-value">{listData?.memo||''}</td></tr>
+      </tbody></table>
 
-      <Sect title="去向时间"><span className="req">*</span><Row>开始 <D v={form.leaveBeginDate} onChange={v=>sets('leaveBeginDate',v)} type="date"/> <Sel v={form.leaveBeginTime} onChange={v=>sets('leaveBeginTime',v)} o={HOURS}/> 至 <D v={form.leaveEndDate} onChange={v=>sets('leaveEndDate',v)} type="date"/> <Sel v={form.leaveEndTime} onChange={v=>sets('leaveEndTime',v)} o={HOURS}/> {duration&&<span className="lr-duration">共 {duration}</span>}</Row></Sect>
-      <Sect title="去向事由类型"><span className="req">*</span><Row>{LEAVE_TYPES.map(lt=><label key={lt.value} className="lr-radio-label"><input type="radio" checked={form.leaveType===lt.value} onChange={()=>sets('leaveType',lt.value)}/>{lt.label}</label>)}</Row></Sect>
-      <Sect title="去向地点"><span className="req">*</span><Row>
-        <AreaPicker province={form.province} city={form.city} district={form.district}
-          onProvChange={v=>sets('province',v)} onCityChange={v=>sets('city',v)} onDistChange={v=>sets('district',v)}/>
-        <D v={form.outAddress} onChange={v=>sets('outAddress',v)} p="详细地址" s={{flex:1}}/>
-      </Row></Sect>
-      <Sect title="其他信息（选填）"><Row>已告知家长 <label className="lr-radio-label"><input type="radio" checked={form.isTellRbl==='1'} onChange={()=>sets('isTellRbl','1')}/>是</label><label className="lr-radio-label"><input type="radio" checked={form.isTellRbl==='0'} onChange={()=>sets('isTellRbl','0')}/>否</label> 同行人数 <Sel v={form.withNumNo} onChange={v=>sets('withNumNo',v)} o={PEOPLE_COUNT}/></Row></Sect>
-      <Sect title="家长或监护人信息">
-        <Row><span className="req">*</span>姓名 <D v={form.jhrName} onChange={v=>sets('jhrName',v)} w={130}/> <span className="req">*</span>联系电话 <D v={form.jhrPhone} onChange={v=>sets('jhrPhone',v)} w={130}/></Row>
-      </Sect>
-      <Sect title="外出联系人">
-        <Row>固定电话（选填） <D v={form.outTel} onChange={v=>sets('outTel',v)} w={130}/> <span className="req">*</span>移动电话 <D v={form.outMoveTel} onChange={v=>sets('outMoveTel',v)} w={130}/></Row>
-        <Row><span className="req">*</span>本人关系 <D v={form.relation} onChange={v=>sets('relation',v)} w={130}/> <span className="req">*</span>联系人姓名 <D v={form.outName} onChange={v=>sets('outName',v)} w={130}/></Row>
-      </Sect>
-      <Sect title="本人联系方式">
-        <Row><span className="req">*</span>本人移动电话 <D v={form.stuMoveTel} onChange={v=>sets('stuMoveTel',v)} w={130}/> 其他联系方式（选填） <D v={form.stuOtherTel} onChange={v=>sets('stuOtherTel',v)} w={130}/></Row>
-      </Sect>
-      <Sect title="往返交通工具（选填）"><Row>去程 <D v={form.goDate} onChange={v=>sets('goDate',v)} type="date"/> <Sel v={form.goTime} onChange={v=>sets('goTime',v)} o={HOURS}/> 工具：{VEHICLES.map(v=><label key={v} className="lr-radio-label"><input type="radio" checked={form.goVehicle===v} onChange={()=>sets('goVehicle',v)}/>{v}</label>)}</Row><Row>返程 <D v={form.backDate} onChange={v=>sets('backDate',v)} type="date"/> <Sel v={form.backTime} onChange={v=>sets('backTime',v)} o={HOURS}/> 工具：{VEHICLES.map(v=><label key={v} className="lr-radio-label"><input type="radio" checked={form.backVehicle===v} onChange={()=>sets('backVehicle',v)}/>{v}</label>)}</Row></Sect>
+      {/* 节假日去向信息 */}
+      <table className="lr-official-table"><tbody>
+        <tr><td colSpan={4} className="lr-ot-title">节假日去向信息</td></tr>
 
-      <div className="lr-bottom"><button className="btn btn-outline" onClick={()=>{setForm({...DEFAULT_FORM});}}>重置</button><button className="btn btn-outline" onClick={()=>setShowTpl(true)}>加载模板</button><button className="btn btn-primary" disabled={loading} onClick={handleSubmit}>{loading?'提交中...':'提交'}</button></div>
+        {/* 去向时间 */}
+        <tr><td className="lr-ot-label">去向时间：</td><td colSpan={3} className="lr-ot-value">
+          开始 <D v={form.leaveBeginDate} onChange={v=>sets('leaveBeginDate',v)} type="date" s={{width:90}}/>
+          <span style={{color:'red'}}>*</span>
+          <Sel v={form.leaveBeginTime} onChange={v=>sets('leaveBeginTime',v)} o={HOURS}/>
+          &nbsp;至&nbsp;
+          <D v={form.leaveEndDate} onChange={v=>sets('leaveEndDate',v)} type="date" s={{width:90}}/>
+          <span style={{color:'red'}}>*</span>
+          <Sel v={form.leaveEndTime} onChange={v=>sets('leaveEndTime',v)} o={HOURS}/>
+          共计&nbsp;<span className="lr-duration-o">{duration||'0天0小时'}</span>
+        </td></tr>
+
+        {/* 去向事由类型 */}
+        <tr><td className="lr-ot-label">去向事由类型：</td><td colSpan={3} className="lr-ot-value">
+          {LEAVE_TYPES.map(lt=><label key={lt.value} className="lr-radio-label"><input type="radio" checked={form.leaveType===lt.value} onChange={()=>sets('leaveType',lt.value)}/>{lt.label}</label>)}
+          <span style={{color:'red'}}>*</span>
+        </td></tr>
+
+        {/* 事由说明 */}
+        <tr><td className="lr-ot-label">事由说明：</td><td colSpan={3} className="lr-ot-value">
+          <textarea value={form.leaveThing} onChange={e=>sets('leaveThing',e.target.value)} className="lr-ot-textarea"/>
+        </td></tr>
+
+        {/* 去向地点 */}
+        <tr><td className="lr-ot-label">去向地点：</td><td colSpan={3} className="lr-ot-value">
+          <AreaPicker province={form.province} city={form.city} district={form.district}
+            onProvChange={v=>sets('province',v)} onCityChange={v=>sets('city',v)} onDistChange={v=>sets('district',v)}/>
+          <D v={form.outAddress} onChange={v=>sets('outAddress',v)} p="" s={{width:'50%'}}/>
+          <span style={{color:'red'}}>*</span>
+        </td></tr>
+
+        {/* 是否已告知家长 + 同行人数 */}
+        <tr>
+          <td className="lr-ot-label">是否已告知家长：</td>
+          <td className="lr-ot-value">
+            <label className="lr-radio-label"><input type="radio" checked={form.isTellRbl==='1'} onChange={()=>sets('isTellRbl','1')}/>是</label>
+            <label className="lr-radio-label"><input type="radio" checked={form.isTellRbl==='0'} onChange={()=>sets('isTellRbl','0')}/>否</label>
+          </td>
+          <td className="lr-ot-label">同行人数：</td>
+          <td className="lr-ot-value">
+            <Sel v={form.withNumNo} onChange={v=>sets('withNumNo',v)} o={PEOPLE_COUNT}/>
+          </td>
+        </tr>
+      </tbody></table>
+
+      {/* 家长或监护人信息 */}
+      <table className="lr-official-table"><tbody>
+        <tr><td colSpan={4} className="lr-ot-title">家长或监护人信息</td></tr>
+        <tr>
+          <td className="lr-ot-label" style={{width:'15%'}}>姓名：</td>
+          <td className="lr-ot-value" style={{width:'35%'}}>
+            <D v={form.jhrName} onChange={v=>sets('jhrName',v)} w={115}/><span style={{color:'red'}}>*</span>
+          </td>
+          <td className="lr-ot-label" style={{width:'15%'}}>联系电话：</td>
+          <td className="lr-ot-value" style={{width:'35%'}}>
+            <D v={form.jhrPhone} onChange={v=>sets('jhrPhone',v)} w={115}/><span style={{color:'red'}}>*</span>
+          </td>
+        </tr>
+      </tbody></table>
+
+      {/* 外出联系人 */}
+      <table className="lr-official-table"><tbody>
+        <tr><td colSpan={4} className="lr-ot-title">外出联系人</td></tr>
+        <tr>
+          <td className="lr-ot-label">固定电话：</td>
+          <td className="lr-ot-value"><D v={form.outTel} onChange={v=>sets('outTel',v)} w={115}/></td>
+          <td className="lr-ot-label">移动电话：</td>
+          <td className="lr-ot-value"><D v={form.outMoveTel} onChange={v=>sets('outMoveTel',v)} w={115}/><span style={{color:'red'}}>*</span></td>
+        </tr>
+        <tr>
+          <td className="lr-ot-label">本人关系：</td>
+          <td className="lr-ot-value"><D v={form.relation} onChange={v=>sets('relation',v)} w={113}/><span style={{color:'red'}}>*</span></td>
+          <td className="lr-ot-label">联系人姓名：</td>
+          <td className="lr-ot-value"><D v={form.outName} onChange={v=>sets('outName',v)} w={113}/><span style={{color:'red'}}>*</span></td>
+        </tr>
+      </tbody></table>
+
+      {/* 本人联系方式 */}
+      <table className="lr-official-table"><tbody>
+        <tr><td colSpan={4} className="lr-ot-title">本人联系方式</td></tr>
+        <tr>
+          <td className="lr-ot-label">本人移动电话：</td>
+          <td className="lr-ot-value"><D v={form.stuMoveTel} onChange={v=>sets('stuMoveTel',v)} w={115}/><span style={{color:'red'}}>*</span></td>
+          <td className="lr-ot-label">其他联系方式：</td>
+          <td className="lr-ot-value"><D v={form.stuOtherTel} onChange={v=>sets('stuOtherTel',v)} w={115}/></td>
+        </tr>
+      </tbody></table>
+
+      {/* 往返交通工具 */}
+      <table className="lr-official-table"><tbody>
+        <tr><td colSpan={4} className="lr-ot-title">往返交通工具</td></tr>
+        <tr>
+          <td className="lr-ot-label" rowSpan={2}>往返交通工具：</td>
+          <td colSpan={3} className="lr-ot-value">
+            <div style={{marginBottom:4}}>
+              去：<D v={form.goDate} onChange={v=>sets('goDate',v)} type="date" s={{width:90}}/>
+              <Sel v={form.goTime} onChange={v=>sets('goTime',v)} o={HOURS}/>
+              &nbsp;;交通工具：
+              {VEHICLES.map(v=><label key={v} className="lr-radio-label"><input type="radio" checked={form.goVehicle===v} onChange={()=>sets('goVehicle',v)}/>{v}</label>)}
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td colSpan={3} className="lr-ot-value">
+            返：<D v={form.backDate} onChange={v=>sets('backDate',v)} type="date" s={{width:90}}/>
+            <Sel v={form.backTime} onChange={v=>sets('backTime',v)} o={HOURS}/>
+            &nbsp;;交通工具：
+            {VEHICLES.map(v=><label key={v} className="lr-radio-label"><input type="radio" checked={form.backVehicle===v} onChange={()=>sets('backVehicle',v)}/>{v}</label>)}
+          </td>
+        </tr>
+      </tbody></table>
+
+      <div className="lr-bottom"><button className="btn btn-outline" onClick={()=>setShowTpl(true)}>加载模板</button><button className="btn btn-primary" disabled={loading} onClick={handleSubmit}>{loading?'提交中...':'提交'}</button></div>
       <style>{CSS}</style>
     </div>);
   }
@@ -292,8 +392,17 @@ const CSS = `
 .lr-radio-label{display:inline-flex;align-items:center;gap:2px;cursor:pointer;font-size:13px;padding:1px 5px;border-radius:4px}
 .lr-radio-label input{accent-color:var(--accent)}
 .lr-duration{font-size:12px;color:var(--accent);font-weight:500}
+.lr-duration-o{border:none;text-align:center;width:35px;font-weight:400;background:transparent}
 .req{color:var(--danger-fg);font-weight:700;margin-right:2px}
 .lr-bottom{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;padding-bottom:20px}
+
+/* Official table style */
+.lr-official-table{width:100%;border-collapse:collapse;margin-bottom:8px;border:1px solid #ccc}
+.lr-official-table td{padding:6px 8px;border:1px solid #d4d4d4;font-size:12px;line-height:1.6}
+.lr-ot-title{background:#e8e8e8;font-weight:600;font-size:13px;padding:7px 10px}
+.lr-ot-label{background:#f5f5f5;font-weight:400;color:#333;text-align:right;white-space:nowrap;width:15%}
+.lr-ot-value{background:#fff;color:#333}
+.lr-ot-textarea{width:100%;height:90px;border:1px solid #ccc;padding:4px;font:12px/1.5 system-ui;resize:vertical;box-sizing:border-box}
 
 .lr-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}
 .lr-table th{padding:6px 8px;text-align:left;font-weight:500;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border)}
