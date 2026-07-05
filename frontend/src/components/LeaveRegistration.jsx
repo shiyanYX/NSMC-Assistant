@@ -74,6 +74,10 @@ export default function LeaveRegistration({ account }) {
   const [form, setForm] = useState({ ...DEFAULT_FORM });
   const [successMsg, setSuccessMsg] = useState('');
 
+  // 独立 xg2 登录凭证（与主应用的教务系统账号无关）
+  const [xg2Username, setXg2Username] = useState('');
+  const [xg2Password, setXg2Password] = useState('');
+
   // Template dialog
   const [showTplDialog, setShowTplDialog] = useState(false);
   const [tplName, setTplName] = useState('');
@@ -83,20 +87,20 @@ export default function LeaveRegistration({ account }) {
   const sf = setField(setForm);
 
   useEffect(() => {
-    if (account?.username) setTemplates(loadTemplates(account.username));
-  }, [account?.username]);
+    if (xg2Username) setTemplates(loadTemplates(xg2Username));
+  }, [xg2Username]);
 
   const durationText = calcDuration(form.leaveBeginDate, form.leaveBeginTime, form.leaveEndDate, form.leaveEndTime);
 
-  // Login: single API call, backend auto-handles captcha
+  // Login: separate xg2 credentials
   const handleLogin = async () => {
-    if (!account?.username || !account?.password) { setError('请在上级页面输入学号和密码'); return; }
+    if (!xg2Username || !xg2Password) { setError('请输入 xg2 学号和密码'); return; }
     setLoading(true); setError('');
     try {
       const resp = await fetch('http://localhost:5000/api/xg2/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: account.username, password: account.password }),
+        body: JSON.stringify({ username: xg2Username, password: xg2Password }),
       });
       const data = await resp.json();
       if (!data.success) { setError(data.message || 'xg2 登录失败'); return; }
@@ -147,7 +151,7 @@ export default function LeaveRegistration({ account }) {
       const resp = await fetch('http://localhost:5000/api/xg2/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: account.username, form_fields: fields }),
+        body: JSON.stringify({ username: xg2Username, form_fields: fields }),
       });
       const data = await resp.json();
       if (!data.success) { setError(data.message || '提交失败'); return; }
@@ -161,7 +165,7 @@ export default function LeaveRegistration({ account }) {
     if (!tplName.trim()) return;
     const updated = [...templates, { id: Date.now(), name: tplName.trim(), fields: { ...form }, createdAt: new Date().toISOString() }];
     setTemplates(updated);
-    saveTemplateList(account?.username || '', updated);
+    saveTemplateList(xg2Username || '', updated);
     setTplName('');
   };
   const handleLoadTpl = (tpl) => { setForm({ ...DEFAULT_FORM, ...tpl.fields }); setShowTplDialog(false); setSuccessMsg('✅ 已加载模板: ' + tpl.name); setTimeout(() => setSuccessMsg(''), 2000); };
@@ -182,14 +186,22 @@ export default function LeaveRegistration({ account }) {
     </div>
   );
 
-  // ====== Not logged in yet ======
+  // ====== Not logged in yet - independent xg2 login ======
   if (!loggedIn) {
     return (
       <div className="lr-root">
         <div className="lr-login-card">
           <h2>节假日去向登记</h2>
-          <p className="lr-login-desc">将使用学号 <strong>{account?.username}</strong> 登录 xg2 学工系统</p>
+          <p className="lr-login-desc">请输入 xg2 学工系统的账号密码</p>
           {error && <div className="msg msg-error">✗ {error}</div>}
+          <div className="lr-field-col">
+            <label>xg2 学号</label>
+            <input value={xg2Username} onChange={e => setXg2Username(e.target.value)} className="lr-input" placeholder="请输入学号" />
+          </div>
+          <div className="lr-field-col">
+            <label>xg2 密码</label>
+            <input type="password" value={xg2Password} onChange={e => setXg2Password(e.target.value)} className="lr-input" placeholder="请输入密码" />
+          </div>
           <button className="btn btn-primary lr-btn-full" disabled={loading} onClick={handleLogin}>
             {loading ? '登录中...' : '开始登记'}
           </button>
