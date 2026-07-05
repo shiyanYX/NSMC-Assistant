@@ -155,6 +155,7 @@ def login_and_get_list(username, password):
             'list_viewstate': list_fields.get('__VIEWSTATE', ''),
             'list_eventvalidation': list_fields.get('__EVENTVALIDATION', ''),
             'list_viewstategenerator': list_fields.get('__VIEWSTATEGENERATOR', ''),
+            'list_html': list_html,
         }
 
     return {
@@ -193,12 +194,13 @@ def get_edit_form(username):
 
     f = _aspnet_fields(edit_html)
 
-    # 更新缓存中的编辑页 VIEWSTATE
+    # 更新缓存中的编辑页 VIEWSTATE 和 HTML
     with _cache_lock:
         if LOGIN_DATA_CACHE.get(username):
             LOGIN_DATA_CACHE[username]['edit_viewstate'] = f.get('__VIEWSTATE', '')
             LOGIN_DATA_CACHE[username]['edit_eventvalidation'] = f.get('__EVENTVALIDATION', '')
             LOGIN_DATA_CACHE[username]['edit_viewstategenerator'] = f.get('__VIEWSTATEGENERATOR', '')
+            LOGIN_DATA_CACHE[username]['edit_html'] = edit_html
 
     return {
         'success': True,
@@ -232,6 +234,32 @@ def submit_leave(username, form_fields):
         '__SCROLLPOSITIONX': '0', '__SCROLLPOSITIONY': '0',
     }
     data.update(form_fields)
+
+    # ASP.NET 日期验证需要 hidden 字段 Leave1_LeaveBeginDate2 和 Leave1_LeaveEndDate2
+    # 页面的 JS getDateDiff() 比较用户输入和这两个字段的值，不在范围内就报错
+    # 这些字段在页面底部：<input name="Leave1$LeaveBeginDate2" type="hidden" .../>
+    # 注意！field_name 中的 $ 在 regex 中不需要转义（re.escape 会处理）
+    import re as _re
+    html_sources = [login_data.get('edit_html'), login_data.get('list_html')]
+    for src in html_sources:
+        if not src: continue
+        for suffix in ['LeaveBeginDate2', 'LeaveEndDate2']:
+            field_name = f'Leave1${suffix}'
+            if field_name not in data:
+                m = _re.search(rf'name="{_re.escape(field_name)}"[^>]*value="([^"]*)"', src)
+                if m:
+                    data[field_name] = m.group(1)
+        # if we got both, no need more sources
+        if 'Leave1$LeaveBeginDate2' in data and 'Leave1$LeaveEndDate2' in data:
+            break
+
+    # 从 form_fields 中取的日期范围，确保 ASP.NET 验证通过
+    # ASP.NET JS 的 getDateDiff() 用这两个 hidden 字段判断日期是否在节假日范围内
+    # 如果没从 HTML 取到，从 form_fields 的 Leave1$LeaveBeginDate/Leave1$LeaveEndDate 取值
+    if 'Leave1$LeaveBeginDate2' not in data:
+        data['Leave1$LeaveBeginDate2'] = data.get('Leave1$LeaveBeginDate', '')
+    if 'Leave1$LeaveEndDate2' not in data:
+        data['Leave1$LeaveEndDate2'] = data.get('Leave1$LeaveEndDate', '')
 
     try:
         resp = login_data['session'].post(
