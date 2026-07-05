@@ -177,26 +177,57 @@ export default function LeaveRegistration({ account }) {
   );
 
   // === Form page ===
-  if (page === 'form') return (
+  if (page === 'form') {
+    // 保留前端编辑页基本信息（来自 d.data）
+    const [editInfo, setEditInfo] = useState(null);
+    // loadedEditRef 防止重复请求
+    const loadedRef = React.useRef(false);
+    React.useEffect(() => {
+      if (loadedRef.current) return;
+      loadedRef.current = true;
+      (async () => {
+        try {
+          const r = await fetch('http://localhost:5000/api/xg2/edit-form', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:xg2User})});
+          const d = await r.json();
+          if (d.success) setEditInfo(d.data);
+        } catch(_) {}
+      })();
+    }, []);
+
+    return (
     <div className="lr-root">
       <div className="lr-header"><h2>新增去向登记</h2><div className="lr-header-actions"><button className="btn btn-outline" onClick={()=>setShowTpl(true)}>模板</button><button className="btn btn-primary" disabled={loading} onClick={handleSubmit}>{loading?'提交中...':'提交'}</button></div></div>
       {successMsg&&<div className="msg msg-success">{successMsg}</div>}
       {error&&<div className="msg msg-error">✗ {error}</div>}
       {showTpl&&tplDialog}
 
-      <Sect title="去向时间"><Row>开始 <D v={form.leaveBeginDate} onChange={v=>sets('leaveBeginDate',v)} type="date"/> <Sel v={form.leaveBeginTime} onChange={v=>sets('leaveBeginTime',v)} o={HOURS}/> 至 <D v={form.leaveEndDate} onChange={v=>sets('leaveEndDate',v)} type="date"/> <Sel v={form.leaveEndTime} onChange={v=>sets('leaveEndTime',v)} o={HOURS}/> {duration&&<span className="lr-duration">共 {duration}</span>}</Row></Sect>
-      <Sect title="去向事由"><Row>{LEAVE_TYPES.map(lt=><label key={lt.value} className="lr-radio-label"><input type="radio" checked={form.leaveType===lt.value} onChange={()=>sets('leaveType',lt.value)}/>{lt.label}</label>)}</Row><Col label="事由说明"><textarea value={form.leaveThing} onChange={e=>sets('leaveThing',e.target.value)} className="lr-textarea" rows={3}/></Col></Sect>
-      <Sect title="去向地点"><Row><D v={form.outAddress} onChange={v=>sets('outAddress',v)} p="省/市/区 + 详细地址" s={{flex:1}}/></Row></Sect>
-      <Sect title="其他信息"><Row>已告知家长 <label className="lr-radio-label"><input type="radio" checked={form.isTellRbl==='1'} onChange={()=>sets('isTellRbl','1')}/>是</label><label className="lr-radio-label"><input type="radio" checked={form.isTellRbl==='0'} onChange={()=>sets('isTellRbl','0')}/>否</label> 同行人数 <Sel v={form.withNumNo} onChange={v=>sets('withNumNo',v)} o={PEOPLE_COUNT}/></Row></Sect>
-      <Sect title="家长或监护人信息"><Row>姓名 <D v={form.jhrName} onChange={v=>sets('jhrName',v)} w={130}/> 联系电话 <D v={form.jhrPhone} onChange={v=>sets('jhrPhone',v)} w={130}/></Row></Sect>
-      <Sect title="外出联系人"><Row>固定电话 <D v={form.outTel} onChange={v=>sets('outTel',v)} w={130}/> 移动电话 <D v={form.outMoveTel} onChange={v=>sets('outMoveTel',v)} w={130}/></Row><Row>本人关系 <D v={form.relation} onChange={v=>sets('relation',v)} w={130}/> 联系人姓名 <D v={form.outName} onChange={v=>sets('outName',v)} w={130}/></Row></Sect>
-      <Sect title="本人联系方式"><Row>本人手机 <D v={form.stuMoveTel} onChange={v=>sets('stuMoveTel',v)} w={130}/> 其他方式 <D v={form.stuOtherTel} onChange={v=>sets('stuOtherTel',v)} w={130}/></Row></Sect>
-      <Sect title="往返交通工具"><Row>去程 <D v={form.goDate} onChange={v=>sets('goDate',v)} type="date"/> <Sel v={form.goTime} onChange={v=>sets('goTime',v)} o={HOURS}/> 工具：{VEHICLES.map(v=><label key={v} className="lr-radio-label"><input type="radio" checked={form.goVehicle===v} onChange={()=>sets('goVehicle',v)}/>{v}</label>)}</Row><Row>返程 <D v={form.backDate} onChange={v=>sets('backDate',v)} type="date"/> <Sel v={form.backTime} onChange={v=>sets('backTime',v)} o={HOURS}/> 工具：{VEHICLES.map(v=><label key={v} className="lr-radio-label"><input type="radio" checked={form.backVehicle===v} onChange={()=>sets('backVehicle',v)}/>{v}</label>)}</Row></Sect>
+      {/* 节假日信息参考 */}
+      {editInfo&&<div className="lr-info-card" style={{marginBottom:12}}>
+        <div className="lr-info-title">{editInfo.holiday_name||'节假日信息'}</div>
+        <div className="lr-info-row"><span>放假：{editInfo.begin_date||'-'} ~ {editInfo.end_date||'-'}</span><span>登记截止：{editInfo.leave_end_date||'-'}</span></div>
+        {editInfo.memo&&<div className="lr-info-memo">{editInfo.memo}</div>}
+      </div>}
+
+      <Sect title="去向时间"><span className="req">*</span><Row>开始 <D v={form.leaveBeginDate} onChange={v=>sets('leaveBeginDate',v)} type="date"/> <Sel v={form.leaveBeginTime} onChange={v=>sets('leaveBeginTime',v)} o={HOURS}/> 至 <D v={form.leaveEndDate} onChange={v=>sets('leaveEndDate',v)} type="date"/> <Sel v={form.leaveEndTime} onChange={v=>sets('leaveEndTime',v)} o={HOURS}/> {duration&&<span className="lr-duration">共 {duration}</span>}</Row></Sect>
+      <Sect title="去向事由类型"><span className="req">*</span><Row>{LEAVE_TYPES.map(lt=><label key={lt.value} className="lr-radio-label"><input type="radio" checked={form.leaveType===lt.value} onChange={()=>sets('leaveType',lt.value)}/>{lt.label}</label>)}</Row></Sect>
+      <Sect title="去向地点"><span className="req">*</span><Row><D v={form.outAddress} onChange={v=>sets('outAddress',v)} p="省/市/区 + 详细地址" s={{flex:1}}/></Row></Sect>
+      <Sect title="其他信息（选填）"><Row>已告知家长 <label className="lr-radio-label"><input type="radio" checked={form.isTellRbl==='1'} onChange={()=>sets('isTellRbl','1')}/>是</label><label className="lr-radio-label"><input type="radio" checked={form.isTellRbl==='0'} onChange={()=>sets('isTellRbl','0')}/>否</label> 同行人数 <Sel v={form.withNumNo} onChange={v=>sets('withNumNo',v)} o={PEOPLE_COUNT}/></Row></Sect>
+      <Sect title="家长或监护人信息">
+        <Row><span className="req">*</span>姓名 <D v={form.jhrName} onChange={v=>sets('jhrName',v)} w={130}/> <span className="req">*</span>联系电话 <D v={form.jhrPhone} onChange={v=>sets('jhrPhone',v)} w={130}/></Row>
+      </Sect>
+      <Sect title="外出联系人">
+        <Row>固定电话（选填） <D v={form.outTel} onChange={v=>sets('outTel',v)} w={130}/> <span className="req">*</span>移动电话 <D v={form.outMoveTel} onChange={v=>sets('outMoveTel',v)} w={130}/></Row>
+        <Row><span className="req">*</span>本人关系 <D v={form.relation} onChange={v=>sets('relation',v)} w={130}/> <span className="req">*</span>联系人姓名 <D v={form.outName} onChange={v=>sets('outName',v)} w={130}/></Row>
+      </Sect>
+      <Sect title="本人联系方式">
+        <Row><span className="req">*</span>本人移动电话 <D v={form.stuMoveTel} onChange={v=>sets('stuMoveTel',v)} w={130}/> 其他联系方式（选填） <D v={form.stuOtherTel} onChange={v=>sets('stuOtherTel',v)} w={130}/></Row>
+      </Sect>
+      <Sect title="往返交通工具（选填）"><Row>去程 <D v={form.goDate} onChange={v=>sets('goDate',v)} type="date"/> <Sel v={form.goTime} onChange={v=>sets('goTime',v)} o={HOURS}/> 工具：{VEHICLES.map(v=><label key={v} className="lr-radio-label"><input type="radio" checked={form.goVehicle===v} onChange={()=>sets('goVehicle',v)}/>{v}</label>)}</Row><Row>返程 <D v={form.backDate} onChange={v=>sets('backDate',v)} type="date"/> <Sel v={form.backTime} onChange={v=>sets('backTime',v)} o={HOURS}/> 工具：{VEHICLES.map(v=><label key={v} className="lr-radio-label"><input type="radio" checked={form.backVehicle===v} onChange={()=>sets('backVehicle',v)}/>{v}</label>)}</Row></Sect>
 
       <div className="lr-bottom"><button className="btn btn-outline" onClick={()=>{setForm({...DEFAULT_FORM});}}>重置</button><button className="btn btn-outline" onClick={()=>setShowTpl(true)}>加载模板</button><button className="btn btn-primary" disabled={loading} onClick={handleSubmit}>{loading?'提交中...':'提交'}</button></div>
       <style>{CSS}</style>
-    </div>
-  );
+    </div>);
+  }
 
   // === Done page ===
   return (
@@ -238,6 +269,7 @@ const CSS = `
 .lr-radio-label{display:inline-flex;align-items:center;gap:2px;cursor:pointer;font-size:13px;padding:1px 5px;border-radius:4px}
 .lr-radio-label input{accent-color:var(--accent)}
 .lr-duration{font-size:12px;color:var(--accent);font-weight:500}
+.req{color:var(--danger-fg);font-weight:700;margin-right:2px}
 .lr-bottom{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;padding-bottom:20px}
 
 .lr-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}
