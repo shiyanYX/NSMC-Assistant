@@ -11,6 +11,7 @@ import re
 import random
 import requests
 import urllib3
+from urllib.parse import urlencode
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -126,6 +127,22 @@ def _extract_span_text(html, span_id):
     return ''
 
 
+def _gbk_form_body(form_dict):
+    """
+    ASP.NET 页面是 gb2312 编码，按钮值含中文。
+    requests 默认用 UTF-8 编码 POST body，会导致服务器不认。
+    需要手动用 GB2312 编码每个字段值。
+    """
+    import urllib.parse
+    parts = []
+    for key, value in form_dict.items():
+        # 对 key 和 value 分别用 gb2312 编码后 percent-encode
+        key_q = urllib.parse.quote_from_bytes(key.encode('gb2312'))
+        val_q = urllib.parse.quote_from_bytes(value.encode('gb2312'))
+        parts.append(f'{key_q}={val_q}')
+    return '&'.join(parts)
+
+
 # ====== 公开 API ======
 # 验证码纯客户端生成、服务端不校验，后端直接自动生成并填好，前端无需用户输入
 
@@ -160,7 +177,7 @@ def login_and_get_form(username, password):
     # 2. 自动生成验证码（服务端不校验，纯客户端 JS 行为）
     captcha = _generate_captcha()
 
-    # 3. RSA 加密并 POST 登录
+    # 3. RSA 加密并 POST 登录（注意！页面是 gb2312 编码，表单需用 gb2312 编码）
     try:
         encrypted = _rsa_encrypt(username, password, modulus)
 
@@ -178,7 +195,13 @@ def login_and_get_form(username, password):
             'queryBtn': '登          录',
         }
 
-        login_resp = session.post(f'{BASE}/UserLogin.aspx', data=form_data, timeout=15)
+        body = _gbk_form_body(form_data)
+        login_resp = session.post(
+            f'{BASE}/UserLogin.aspx',
+            data=body,
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            timeout=15
+        )
         login_html = login_resp.text
     except Exception as e:
         return {'success': False, 'message': f'登录请求失败: {str(e)}'}
@@ -255,7 +278,12 @@ def submit_leave(username, form_fields):
 
     try:
         edit_url = f'{BASE}/SystemForm/Leave/StuLeave_Edit.aspx?Status=Add'
-        resp = session.post(edit_url, data=data, timeout=15)
+        body = _gbk_form_body(data)
+        resp = session.post(
+            edit_url, data=body,
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            timeout=15
+        )
         text = resp.text
     except Exception as e:
         return False, f'提交请求失败: {str(e)}'
