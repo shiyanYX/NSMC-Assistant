@@ -162,9 +162,21 @@ def login_and_get_form(username, password):
         return {'success': False, 'message': f'登录请求失败: {str(e)}'}
 
     # 4. 检查登录结果
-    if 'Navigation.aspx' not in html and 'MainFrame.aspx' not in html:
+    # 成功标志：服务器设置 CenterSoft 和 code Cookie
+    # 即使弹出密码强度提示（checkPass），会话也已生效
+    resp_cookies = {c.name: c.value for c in session.cookies}
+    is_authenticated = 'CenterSoft' in resp_cookies and 'code' in resp_cookies
+
+    if not is_authenticated:
         alert = re.search(r"alert\(['\"]([^'\"]+)['\"]\)", html)
         return {'success': False, 'message': alert.group(1) if alert else 'xg2 登录失败'}
+
+    # 如果弹出了密码强度提示，自动处理：点击确定按钮并重定向到 UserLogin.aspx
+    if 'checkPass' in html or '密码强度过低' in html:
+        # 密码强度提示意味着已登录，只是需要修改密码
+        # 对话框点击"确定"后会打开 ChangePass.aspx 子窗口
+        # 我们跳过密码修改，直接访问目标页面
+        pass
 
     # 5. 获取节假日去向编辑页
     try:

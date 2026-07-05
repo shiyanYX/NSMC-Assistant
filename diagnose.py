@@ -7,8 +7,8 @@ import requests, urllib3
 urllib3.disable_warnings()
 
 # ====== 请填入真实 xg2 账号密码 ======
-USER = "你的学号"
-PASS = "你的密码"
+USER = "202302012127"
+PASS = "Jyx1593574682"
 # ====================================
 
 s = requests.Session()

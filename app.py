@@ -2,8 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import score_fetcher_http
 import xg2_fetcher
-import re
-import os
+import re, os
 
 app = Flask(__name__, static_folder=None)
 CORS(app)
