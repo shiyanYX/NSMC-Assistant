@@ -91,8 +91,10 @@ def _rsa_encrypt(username, password, modulus_hex):
     # RSA 加密：c = m^e mod n
     c = pow(m, e, n)
 
-    # 转为 hex
+    # 转为 hex，必须补满 256 位（128 字节），否则服务端 RSA 解密会 IndexOutOfRangeException
     hex_str = hex(c)[2:]
+    if len(hex_str) < 256:
+        hex_str = hex_str.zfill(256)
     return hex_str
 
 
@@ -130,15 +132,13 @@ def _extract_span_text(html, span_id):
 def _gbk_form_body(form_dict):
     """
     ASP.NET 页面是 gb2312 编码，按钮值含中文。
-    requests 默认用 UTF-8 编码 POST body，会导致服务器不认。
-    需要手动用 GB2312 编码每个字段值。
+    手动用 GB2312 编码后构建 form-urlencoded body（空格转 +）。
     """
     import urllib.parse
     parts = []
     for key, value in form_dict.items():
-        # 对 key 和 value 分别用 gb2312 编码后 percent-encode
-        key_q = urllib.parse.quote_from_bytes(key.encode('gb2312'))
-        val_q = urllib.parse.quote_from_bytes(value.encode('gb2312'))
+        key_q = urllib.parse.quote_from_bytes(key.encode('gb2312')).replace('%20', '+')
+        val_q = urllib.parse.quote_from_bytes(value.encode('gb2312')).replace('%20', '+')
         parts.append(f'{key_q}={val_q}')
     return '&'.join(parts)
 
