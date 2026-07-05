@@ -225,22 +225,13 @@ def submit_leave(username, form_fields):
     if not login_data:
         return False, '请先登录'
 
-    data = {
-        '__VIEWSTATE': login_data.get('edit_viewstate', login_data.get('list_viewstate', '')),
-        '__VIEWSTATEGENERATOR': login_data.get('edit_viewstategenerator', login_data.get('list_viewstategenerator', '')),
-        '__VIEWSTATEENCRYPTED': '',
-        '__EVENTVALIDATION': login_data.get('edit_eventvalidation', login_data.get('list_eventvalidation', '')),
-        '__EVENTTARGET': 'Save',
-        '__EVENTARGUMENT': '',
-        '__LASTFOCUS': '',
-        '__SCROLLPOSITIONX': '0', '__SCROLLPOSITIONY': '0',
-    }
+    data = {}
     data.update(form_fields)
 
     # 确保 __EVENTTARGET = Save 触发服务器端按钮事件
-    # 页面 JS: __doPostBack('Save', '') -> ASP.NET 识别 Save 按钮点击
     data['__EVENTTARGET'] = 'Save'
     data['__EVENTARGUMENT'] = ''
+    data['__LASTFOCUS'] = ''
 
     import re as _re
     html_sources = [login_data.get('edit_html'), login_data.get('list_html')]
@@ -262,6 +253,14 @@ def submit_leave(username, form_fields):
         data['Leave1$LeaveBeginDate2'] = data.get('Leave1$LeaveBeginDate', '')
     if 'Leave1$LeaveEndDate2' not in data:
         data['Leave1$LeaveEndDate2'] = data.get('Leave1$LeaveEndDate', '')
+
+    # 添加 ASP.NET 必需的 VIEWSTATE 等字段
+    data['__VIEWSTATE'] = login_data.get('edit_viewstate', login_data.get('list_viewstate', ''))
+    data['__VIEWSTATEGENERATOR'] = login_data.get('edit_viewstategenerator', login_data.get('list_viewstategenerator', ''))
+    data['__VIEWSTATEENCRYPTED'] = ''
+    data['__EVENTVALIDATION'] = login_data.get('edit_eventvalidation', login_data.get('list_eventvalidation', ''))
+    data['__SCROLLPOSITIONX'] = '0'
+    data['__SCROLLPOSITIONY'] = '0'
 
     try:
         resp = login_data['session'].post(
