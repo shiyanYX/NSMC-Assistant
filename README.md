@@ -7,6 +7,8 @@
 - **自动登录**：支持学号密码自动登录教务系统
 - **成绩查询**：查询并展示学生成绩
 - **学期筛选**：支持按学期筛选成绩
+- **教学评价**：一键评教，实时查看进度和结果
+- **去向登记**：节假日去向登记，支持模板快速填写（开发中）
 
 ## 技术栈
 
@@ -42,8 +44,12 @@
 │   └── 川北医助手.exe   # 可执行文件
 ├── accounts.db         # 账户数据库
 ├── accounts.txt        # 账户信息文件
-├── app.py              # Flask后端应用
-└── score_fetcher_http.py  # 成绩获取模块
+├── app.py               # Flask后端应用
+├── score_fetcher_http.py# 成绩获取 + 评教模块
+├── xg2_fetcher.py       # 学工系统去向登记爬虫
+├── backend_rust/        # Rust后端 (Actix-web)
+├── frontend/            # Tauri + React前端
+└── README.md
 ```
 
 ## 安装说明
