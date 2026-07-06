@@ -237,7 +237,7 @@ function App() {
             <a className={currentNav === 'evaluation' && !showHome ? 'active' : ''}
                onClick={() => switchNav('evaluation')}>教学评价</a>
             <a className={currentNav === 'leave' && !showHome ? 'active' : ''}
-               onClick={() => switchNav('leave')}>去向登记</a>
+               onClick={() => switchNav('leave')}>去向登记 <span className="dev-tag">开发中</span></a>
           </nav>
         </div>
         <div className="header-right">
@@ -287,6 +287,7 @@ function App() {
               <h3>去向登记</h3>
               <p>节假日去向登记，支持模板快速填写</p>
               <span className="hc-badge hc-blue">学工系统</span>
+              <span className="hc-badge hc-dev">开发中</span>
             </div>
           </div>
         </div>
@@ -373,6 +374,8 @@ function App() {
         }
         .hc-blue { background: oklch(50% 0.14 255 / 0.1); color: oklch(38% 0.14 255); }
         .hc-orange { background: oklch(55% 0.14 50 / 0.1); color: oklch(45% 0.12 50); }
+        .hc-dev { background: oklch(55% 0.16 25 / 0.1); color: oklch(45% 0.14 25); margin-left: 4px; }
+        .dev-tag { font-size: 10px; font-weight: 600; background: oklch(55% 0.16 25 / 0.15); color: oklch(45% 0.14 25); padding: 1px 5px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
       `}</style>
     </div>
   );
