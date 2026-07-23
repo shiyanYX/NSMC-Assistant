@@ -1,3 +1,6 @@
+#[cfg(feature = "android-jni")]
+pub mod jni_bridge;
+
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use log::{info, error};
 use reqwest::{Client, ClientBuilder, cookie::Jar};

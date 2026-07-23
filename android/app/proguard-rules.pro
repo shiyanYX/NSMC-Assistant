@@ -1,0 +1,2 @@
+-keep class com.nsmc.assistant.RustBridge { *; }
+-keepclassmembers class com.nsmc.assistant.RustBridge { *; }

@@ -177,6 +177,12 @@ Thumbs.db
 # Development artifacts with sensitive captured traffic
 *.har
 
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
 # Scraped school system HTML samples (internal structure)
 main_page.html
 xg2_diag_resp.html
