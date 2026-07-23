@@ -2,21 +2,29 @@ import React, { useState, useEffect } from 'react';
 import ScoreQuery from './components/ScoreQuery';
 import EvaluationQuery from './components/EvaluationQuery';
 import LeaveRegistration from './components/LeaveRegistration';
+import { apiLogin, isTauri } from './api';
 
-const isTauri = typeof window !== 'undefined' && window.__TAURI__;
-
-let Command = null;
 let backendProcess = null;
-let appWindow = null;
 
-if (isTauri) {
+async function getShell() {
   try {
-    Command = require('@tauri-apps/api/shell').Command;
-    appWindow = require('@tauri-apps/api/window').appWindow;
-  } catch (e) {
-    console.log('Tauri API not available in development mode');
-  }
+    const mod = await import('@tauri-apps/api/shell');
+    return mod.Command;
+  } catch { return null; }
 }
+
+async function getWindow() {
+  try {
+    const mod = await import('@tauri-apps/api/window');
+    return mod.appWindow || mod.getCurrentWindow?.();
+  } catch { return null; }
+}
+
+const NAVS = [
+  { key: 'score', label: '成绩', icon: '📊' },
+  { key: 'evaluation', label: '评教', icon: '📝' },
+  { key: 'leave', label: '去向', icon: '📍' },
+];
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -24,10 +32,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [dark, setDark] = useState(false);
-
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [rememberMe, setRememberMe] = useState(false);
-
   const [currentNav, setCurrentNav] = useState('score');
   const [showHome, setShowHome] = useState(false);
 
@@ -39,7 +45,9 @@ function App() {
   const toggleTheme = () => setDark(d => !d);
 
   const startBackend = async () => {
-    if (!isTauri || !Command) return;
+    if (!isTauri) return;
+    const Command = await getShell();
+    if (!Command) return;
     let retryCount = 0;
     const maxRetries = 3;
     while (retryCount < maxRetries) {
@@ -50,11 +58,8 @@ function App() {
         await backendProcess.spawn();
         await new Promise(r => setTimeout(r, 3000));
         try {
-          const res = await fetch('http://localhost:5000/api/login', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: 'test', password: 'test' })
-          });
-          if (res.status) { setError(''); return; }
+          const res = await fetch('http://localhost:5000/', { method: 'HEAD' });
+          if (res.ok) { setError(''); return; }
         } catch (_) {}
         try { await backendProcess.kill(); } catch (_) {}
       } catch (_) {}
@@ -77,12 +82,14 @@ function App() {
       setLoginForm({ username: loginData.username, password: loginData.password });
       setRememberMe(true);
     }
-    if (isTauri && appWindow) {
-      appWindow.once('close-requested', () => stopBackend());
-      return () => stopBackend();
-    } else {
-      return () => stopBackend();
+    if (isTauri) {
+      getWindow().then(win => {
+        if (win && win.once) {
+          win.once('close-requested', () => stopBackend());
+        }
+      });
     }
+    return () => stopBackend();
   }, []);
 
   const handleLogin = async (e) => {
@@ -90,21 +97,15 @@ function App() {
     if (!loginForm.username || !loginForm.password) { setError('请输入学号和密码'); return; }
     setLoading(true); setError('');
     try {
-      const response = await fetch('http://localhost:5000/api/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: loginForm.username, password: loginForm.password })
-      });
-      const data = await response.json();
-      if (data.success) {
-        const user = { username: loginForm.username, password: loginForm.password, name: data.data?.name || loginForm.username };
-        setCurrentUser(user);
-        localStorage.setItem('currentUser', JSON.stringify(user));
-        if (rememberMe) {
-          localStorage.setItem('savedLogin', JSON.stringify({ username: loginForm.username, password: loginForm.password }));
-        } else { localStorage.removeItem('savedLogin'); }
-        setIsLoggedIn(true); setError('');
-      } else { setError(data.message || '登录失败，请检查学号和密码'); }
-    } catch (err) { setError('网络错误，请稍后重试: ' + err.message); }
+      const data = await apiLogin(loginForm.username, loginForm.password);
+      const user = { username: loginForm.username, password: loginForm.password, name: data?.name || loginForm.username };
+      setCurrentUser(user);
+      localStorage.setItem('currentUser', JSON.stringify(user));
+      if (rememberMe) {
+        localStorage.setItem('savedLogin', JSON.stringify({ username: loginForm.username, password: loginForm.password }));
+      } else { localStorage.removeItem('savedLogin'); }
+      setIsLoggedIn(true); setError('');
+    } catch (err) { setError(err.message || '网络错误，请稍后重试'); }
     finally { setLoading(false); }
   };
 
@@ -231,20 +232,12 @@ function App() {
         <div className="header-left">
           <div className="header-logo" onClick={goHome} title="首页">川</div>
           <span className="header-title">川北医助手</span>
-          <nav className="header-nav">
-            <a className={currentNav === 'score' && !showHome ? 'active' : ''}
-               onClick={() => switchNav('score')}>成绩查询</a>
-            <a className={currentNav === 'evaluation' && !showHome ? 'active' : ''}
-               onClick={() => switchNav('evaluation')}>教学评价</a>
-            <a className={currentNav === 'leave' && !showHome ? 'active' : ''}
-               onClick={() => switchNav('leave')}>去向登记 <span className="dev-tag">开发中</span></a>
-          </nav>
         </div>
         <div className="header-right">
+          <span className="user-name desktop-only">{currentUser.name}</span>
           <button className="theme-btn" onClick={toggleTheme} title={dark ? '浅色模式' : '深色模式'}>
             {dark ? '☀' : '☾'}
           </button>
-          <span className="user-name">{currentUser.name}</span>
           <button className="logout-btn" onClick={handleLogout}>退出</button>
         </div>
       </header>
@@ -256,7 +249,7 @@ function App() {
           <div className="home-cards">
             <div className="home-card" onClick={() => switchNav('score')}>
               <div className="home-card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                   <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
                   <line x1="16" y1="17" x2="8" y2="17"/>
@@ -268,7 +261,7 @@ function App() {
             </div>
             <div className="home-card" onClick={() => switchNav('evaluation')}>
               <div className="home-card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                   <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
                   <path d="M6 12v5c3 3 9 3 12 0v-5"/>
                 </svg>
@@ -279,7 +272,7 @@ function App() {
             </div>
             <div className="home-card" onClick={() => switchNav('leave')}>
               <div className="home-card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                   <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                   <circle cx="12" cy="10" r="3"/>
                 </svg>
@@ -299,43 +292,44 @@ function App() {
         </main>
       )}
 
-      <footer className="app-footer">川北医助手 | NSMC Assistant</footer>
+      <nav className="bottom-nav">
+        {NAVS.map(n => (
+          <a key={n.key} className={currentNav === n.key && !showHome ? 'active' : ''}
+             onClick={() => { switchNav(n.key); }}>
+            <span className="bn-icon">{n.icon}</span>
+            <span className="bn-label">{n.label}</span>
+          </a>
+        ))}
+      </nav>
 
       <style>{`
         .app-root { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
 
         .app-header {
-          height: 48px; flex-shrink: 0;
+          height: 44px; flex-shrink: 0;
           display: flex; align-items: center; justify-content: space-between;
-          padding: 0 20px; background: var(--surface);
+          padding: 0 16px; padding-top: var(--sat);
+          background: var(--surface);
           border-bottom: 1px solid var(--border);
         }
-        .header-left { display: flex; align-items: center; gap: 10px; }
+        .header-left { display: flex; align-items: center; gap: 8px; }
         .header-logo {
-          width: 28px; height: 28px; border-radius: 8px;
+          width: 26px; height: 26px; border-radius: 7px;
           background: var(--accent); color: #fff;
           display: flex; align-items: center; justify-content: center;
-          font: 700 14px/1 system-ui; cursor: pointer; letter-spacing: -0.01em;
+          font: 700 13px/1 system-ui; cursor: pointer; letter-spacing: -0.01em;
           user-select: none;
         }
-        .header-title { font: 600 14px/1 var(--font); letter-spacing: -0.01em; }
-        .header-nav { display: flex; align-items: center; gap: 2px; margin-left: 16px; }
-        .header-nav a {
-          padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 500;
-          color: var(--muted); text-decoration: none; cursor: pointer; transition: all 0.12s;
-          user-select: none;
-        }
-        .header-nav a:hover { color: var(--fg); background: var(--accent-bg); }
-        .header-nav a.active { color: var(--accent); background: var(--accent-soft); }
+        .header-title { font: 600 13px/1 var(--font); letter-spacing: -0.01em; }
 
-        .header-right { display: flex; align-items: center; gap: 8px; }
+        .header-right { display: flex; align-items: center; gap: 6px; }
         .theme-btn {
-          background: none; border: 0; cursor: pointer; font-size: 16px;
-          color: var(--muted); padding: 4px; border-radius: 4px;
+          background: none; border: 0; cursor: pointer; font-size: 15px;
+          color: var(--muted); padding: 6px; border-radius: 6px;
           line-height: 1; transition: background 0.12s;
         }
         .theme-btn:hover { background: var(--accent-bg); }
-        .user-name { font-size: 13px; color: var(--muted); }
+        .user-name { font-size: 12px; color: var(--muted); }
         .logout-btn {
           background: none; border: 1px solid var(--border); border-radius: 6px;
           padding: 4px 10px; font-size: 12px; color: var(--muted); cursor: pointer;
@@ -343,39 +337,60 @@ function App() {
         }
         .logout-btn:hover { background: var(--surface-hover); color: var(--fg); }
 
-        .app-main { flex: 1; padding: 16px 20px; overflow-y: auto; }
-        .app-footer {
-          height: 26px; flex-shrink: 0;
-          display: flex; align-items: center; justify-content: center;
-          font-size: 11px; color: var(--muted);
-          border-top: 1px solid var(--border); background: var(--surface);
-        }
+        .app-main { flex: 1; padding: 12px; overflow-y: auto; padding-bottom: 64px; }
 
-        .home-page { padding: 40px 28px; max-width: 700px; margin: 0 auto; }
-        .home-page h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 4px; }
-        .home-page p { font-size: 14px; color: var(--muted); margin: 0 0 28px; }
-        .home-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+        /* Bottom nav */
+        .bottom-nav {
+          position: fixed; bottom: 0; left: 0; right: 0;
+          height: 48px; padding-bottom: var(--sab);
+          display: flex; align-items: center; justify-content: space-around;
+          background: var(--surface); border-top: 1px solid var(--border);
+          z-index: 50;
+        }
+        .bottom-nav a {
+          display: flex; flex-direction: column; align-items: center; gap: 1px;
+          padding: 4px 12px; cursor: pointer; text-decoration: none;
+          user-select: none; -webkit-tap-highlight-color: transparent;
+          color: var(--muted); transition: color 0.12s;
+        }
+        .bottom-nav a.active { color: var(--accent); }
+        .bn-icon { font-size: 18px; line-height: 1; }
+        .bn-label { font-size: 10px; font-weight: 500; }
+
+        .home-page { padding: 28px 16px; max-width: 700px; margin: 0 auto; }
+        .home-page h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 4px; }
+        .home-page p { font-size: 13px; color: var(--muted); margin: 0 0 24px; }
+        .home-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
         .home-card {
           background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-          padding: 24px; cursor: pointer; transition: border-color 0.15s;
+          padding: 20px; cursor: pointer; transition: border-color 0.15s;
         }
         .home-card:hover { border-color: var(--accent); }
+        .home-card:active { background: var(--surface-hover); }
         .home-card-icon {
-          width: 40px; height: 40px; border-radius: 10px;
+          width: 36px; height: 36px; border-radius: 10px;
           background: var(--accent-bg); color: var(--accent);
-          display: flex; align-items: center; justify-content: center; margin-bottom: 12px;
+          display: flex; align-items: center; justify-content: center; margin-bottom: 10px;
         }
-        .home-card-icon svg { width: 20px; height: 20px; }
-        .home-card h3 { font-size: 16px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
-        .home-card p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.5; }
+        .home-card-icon svg { width: 18px; height: 18px; }
+        .home-card h3 { font-size: 15px; font-weight: 600; margin: 0 0 3px; letter-spacing: -0.01em; }
+        .home-card p { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.5; }
         .hc-badge {
-          display: inline-block; margin-top: 12px; padding: 2px 8px; border-radius: 4px;
+          display: inline-block; margin-top: 10px; padding: 2px 8px; border-radius: 4px;
           font-size: 11px; font-weight: 600;
         }
         .hc-blue { background: oklch(50% 0.14 255 / 0.1); color: oklch(38% 0.14 255); }
         .hc-orange { background: oklch(55% 0.14 50 / 0.1); color: oklch(45% 0.12 50); }
         .hc-dev { background: oklch(55% 0.16 25 / 0.1); color: oklch(45% 0.14 25); margin-left: 4px; }
-        .dev-tag { font-size: 10px; font-weight: 600; background: oklch(55% 0.16 25 / 0.15); color: oklch(45% 0.14 25); padding: 1px 5px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+
+        .desktop-only { display: none; }
+        @media (min-width: 768px) {
+          .desktop-only { display: inline; }
+          .bottom-nav { display: none; }
+          .app-main { padding: 16px 20px; padding-bottom: 0; }
+          .app-header { height: 48px; padding: 0 20px; padding-top: 0; }
+          .home-cards { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+        }
       `}</style>
     </div>
   );

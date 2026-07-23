@@ -173,3 +173,12 @@ src-tauri/tauri.conf.json.backup
 # OS
 .DS_Store
 Thumbs.db
+
+# Development artifacts with sensitive captured traffic
+*.har
+
+# Scraped school system HTML samples (internal structure)
+main_page.html
+xg2_diag_resp.html
+xg2_resp_Custom.html
+xg2_resp_Pycryptodome.html

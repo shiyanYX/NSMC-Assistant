@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { apiGetScore } from '../api';
 
 const SCORE_MODES = [
   { value: 'all', label: '显示全部成绩' },
@@ -87,19 +88,15 @@ function ScoreQuery({ account }) {
         }
       }
     } catch (_) {}
-    fetch('http://localhost:5000/api/score', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: account.username, password: account.password, name: account.name, term: latestTerm })
-    }).then(r => r.json()).then(data => {
-      if (!data.success) return;
-      const ts = data.data.scores.map((s, i) => ({
+    apiGetScore(account.username, account.password, account.name, latestTerm).then(data => {
+      if (!data) return;
+      const ts = (data.scores || []).map((s, i) => ({
         id: i + 1, term: s['开课学期'] || s['学期'] || '', courseCode: s['课程编号'] || '',
         courseName: s['课程名称'] || s['课 程名称'] || '', score: s['成绩'] || 0,
         credit: parseFloat(s['学分'] || 0), hours: s['总学时'] || 0,
         gpa: parseFloat(s['绩点'] || 0), assessment: s['考核方式'] || '',
         nature: s['考试性质'] || '', attribute: s['课程属性'] || ''
       }));
-      // 合并而非替换——从 localStorage 读当前缓存做基准（避免 state 未更新）
       let current = [];
       try {
         const raw = localStorage.getItem(`scores_cache_${account.username}`);
@@ -120,16 +117,9 @@ function ScoreQuery({ account }) {
     setLoading(true); setError(''); setShowSuccess(false);
     setIsFetchingAll(!!fetchAll);
     try {
-      // fetchAll=true 或学期未选时查全部；否则只查指定学期
       const term = fetchAll ? undefined : (selectedTerm !== 'all' ? selectedTerm : 'latest');
-      const response = await fetch('http://localhost:5000/api/score', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: account.username, password: account.password, name: account.name, term })
-      });
-      if (!response.ok) { setError('网络错误，请稍后重试'); return; }
-      const data = await response.json();
-      if (!data.success) { setError(data.message || '获取成绩失败'); return; }
-      const ts = data.data.scores.map((s, i) => ({
+      const data = await apiGetScore(account.username, account.password, account.name, term);
+      const ts = (data.scores || []).map((s, i) => ({
         id: i + 1, term: s['开课学期'] || s['学期'] || '', courseCode: s['课程编号'] || '',
         courseName: s['课程名称'] || s['课 程名称'] || '', score: s['成绩'] || 0,
         credit: parseFloat(s['学分'] || 0), hours: s['总学时'] || 0,
@@ -283,58 +273,55 @@ function ScoreQuery({ account }) {
 
       <style>{`
         .sq-root { }
-        .sq-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-        .sq-header h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
-        .sq-actions { display: flex; gap: 8px; align-items: center; }
+        .sq-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+        .sq-header h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+        .sq-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
         .sq-hint { font-size: 11px; color: var(--muted); padding: 3px 8px; background: var(--accent-bg); border-radius: 4px; }
 
         .btn {
-          height: 28px; padding: 0 12px; border: 0; border-radius: var(--radius-xs);
+          height: 30px; padding: 0 11px; border: 0; border-radius: var(--radius-xs);
           font: 500 12px/1 var(--font); cursor: pointer; white-space: nowrap;
-          transition: opacity 0.12s;
+          transition: opacity 0.12s; -webkit-tap-highlight-color: transparent;
         }
         .btn:active { transform: scale(0.97); }
         .btn-primary { background: var(--accent); color: #fff; }
-        .btn-primary:hover { opacity: 0.88; }
         .btn-primary:disabled { opacity: 0.5; cursor: default; transform: none; }
         .btn-outline { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-        .btn-outline:hover { background: var(--surface-hover); }
         .btn-outline:disabled { opacity: 0.4; cursor: default; }
         .btn-text { background: transparent; color: var(--muted); border: 0; cursor: pointer; font-size: 12px; padding: 0 4px; }
-        .btn-text:hover { color: var(--fg); }
 
-        .msg { padding: 9px 14px; margin-bottom: 12px; border-radius: var(--radius-sm); font-size: 13px; }
+        .msg { padding: 9px 14px; margin-bottom: 10px; border-radius: var(--radius-sm); font-size: 13px; }
         .msg-success { background: var(--success-bg); color: var(--success-fg); }
         .msg-error { background: var(--danger-bg); color: var(--danger-fg); }
 
-        .sq-stats { display: flex; gap: 12px; margin-bottom: 14px; }
-        .sq-stat { flex: 1; padding: 12px 16px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); }
-        .sq-stat-lbl { font-size: 11px; color: var(--muted); letter-spacing: 0.03em; margin-bottom: 3px; }
-        .sq-stat-val { font: 600 24px/1.2 system-ui; letter-spacing: -0.02em; }
+        .sq-stats { display: flex; gap: 10px; margin-bottom: 12px; }
+        .sq-stat { flex: 1; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); }
+        .sq-stat-lbl { font-size: 11px; color: var(--muted); letter-spacing: 0.03em; margin-bottom: 2px; }
+        .sq-stat-val { font: 600 22px/1.2 system-ui; letter-spacing: -0.02em; }
 
-        .sq-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; padding: 8px 14px; background: var(--surface); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+        .sq-filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; padding: 8px 10px; background: var(--surface); border-radius: var(--radius-sm); border: 1px solid var(--border); }
         .sq-filters label { font-size: 11px; color: var(--muted); font-weight: 500; white-space: nowrap; }
         .sq-filters select {
-          height: 26px; padding: 0 20px 0 7px; border: 1px solid var(--border); border-radius: 4px;
-          font: 12px/1 var(--font); color: var(--fg); background: var(--surface);
+          height: 30px; padding: 0 22px 0 7px; border: 1px solid var(--border); border-radius: 5px;
+          font: 13px/1 var(--font); color: var(--fg); background: var(--surface);
           cursor: pointer; outline: none; appearance: none;
           background-image: url("data:image/svg+xml,%3Csvg width='8' height='5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%23999' stroke-width='1.2'/%3E%3C/svg%3E");
-          background-repeat: no-repeat; background-position: right 5px center;
+          background-repeat: no-repeat; background-position: right 6px center;
         }
-        .sq-check { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px; color: var(--muted); }
-        .sq-check input { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+        .sq-check { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px; color: var(--muted); min-height: 30px; }
+        .sq-check input { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
 
-        .sq-table-wrap { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-        .sq-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .sq-table-wrap { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .sq-table { min-width: 650px; width: 100%; border-collapse: collapse; font-size: 12px; }
         .sq-table thead { background: var(--surface); }
-        .sq-table th { padding: 7px 9px; text-align: left; font-weight: 500; color: var(--muted); white-space: nowrap; border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: 0.02em; }
-        .sq-table td { padding: 6px 9px; color: var(--fg); border-bottom: 1px solid var(--border); }
+        .sq-table th { padding: 7px 8px; text-align: left; font-weight: 500; color: var(--muted); white-space: nowrap; border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: 0.02em; }
+        .sq-table td { padding: 6px 8px; color: var(--fg); border-bottom: 1px solid var(--border); white-space: nowrap; }
         .sq-table tbody tr:nth-child(even) { background: var(--surface); }
         .sq-table tbody tr:last-child td { border-bottom: 0; }
         .td-muted { color: var(--muted) !important; }
         .td-empty { text-align: center; padding: 28px !important; color: var(--muted); }
 
-        .s-badge { display: inline-block; padding: 0 6px; height: 19px; line-height: 19px; font-size: 11px; font-weight: 600; border-radius: 3px; white-space: nowrap; }
+        .s-badge { display: inline-block; padding: 1px 7px; height: 20px; line-height: 18px; font-size: 11px; font-weight: 600; border-radius: 4px; white-space: nowrap; }
         .s-badge-a { background: oklch(55% 0.12 145 / 0.12); color: oklch(40% 0.12 145); }
         .s-badge-b { background: oklch(50% 0.12 255 / 0.12); color: oklch(38% 0.12 255); }
         .s-badge-c { background: oklch(55% 0 0 / 0.08); color: var(--muted); }
@@ -354,11 +341,20 @@ function ScoreQuery({ account }) {
         }
         @keyframes sq-spin { to { transform: rotate(360deg); } }
 
-        .sq-empty { padding: 48px 0; text-align: center; }
+        .sq-empty { padding: 40px 0; text-align: center; }
         .sq-empty p { color: var(--muted); font-size: 14px; margin: 0 0 4px; }
         .sq-empty-hint { font-size: 12px; color: var(--muted); }
-        .sq-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 0; }
+        .sq-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 0; }
         .sq-loading p { font-size: 13px; color: var(--muted); margin: 0; }
+
+        @media (max-width: 480px) {
+          .sq-header { flex-direction: column; align-items: stretch; }
+          .sq-actions { justify-content: stretch; }
+          .sq-actions .btn { flex: 1; text-align: center; }
+          .sq-stats { gap: 8px; }
+          .sq-stat-val { font-size: 18px; }
+          .sq-filters { padding: 8px; }
+        }
       `}</style>
     </div>
   );

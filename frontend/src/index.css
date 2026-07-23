@@ -70,3 +70,37 @@ body {
 ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+/* Mobile safe area */
+html {
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+
+/* Responsive breakpoints */
+@media (max-width: 640px) {
+  :root {
+    --radius: 10px;
+    --radius-sm: 6px;
+    --radius-xs: 4px;
+  }
+}
+
+@media (min-width: 768px) {
+  .mobile-only { display: none !important; }
+}
+
+/* Larger touch targets on mobile */
+@media (max-width: 768px) {
+  .btn, button, select, input, textarea {
+    font-size: 14px !important;
+  }
+  input, select, .lr-input, .lr-select {
+    min-height: 40px !important;
+  }
+  .btn, button:not(.btn-text):not(.theme-btn):not(.logout-btn) {
+    min-height: 36px !important;
+  }
+}

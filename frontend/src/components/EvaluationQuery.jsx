@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiEvaluationList, apiEvaluationSubmit } from '../api';
 
 function EvaluationQuery({ account }) {
   const [loading, setLoading] = useState(false);
@@ -13,15 +14,9 @@ function EvaluationQuery({ account }) {
     if (!account?.username || !account?.password) { setError('账号信息不完整'); return; }
     setLoading(true); setError(''); setInfo(''); setShowSuccess(false);
     try {
-      const res = await fetch('http://localhost:5000/api/evaluation/list', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: account.username, password: account.password })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTeachers(data.data.teachers);
-        setInfo(`共 ${data.data.total} 人，已提交 ${data.data.submitted}，待评 ${data.data.unsubmitted}`);
-      } else { setError(data.message || '获取评价列表失败'); }
+      const data = await apiEvaluationList(account.username, account.password);
+      setTeachers(data.teachers);
+      setInfo(`共 ${data.total} 人，已提交 ${data.submitted}，待评 ${data.unsubmitted}`);
     } catch (err) { setError(`网络错误: ${err.message || '连接失败'}`); }
     finally { setLoading(false); }
   };
@@ -38,12 +33,8 @@ function EvaluationQuery({ account }) {
       const t = unsubmitted[i];
       setProgress(`[${i + 1}/${unsubmitted.length}] ${t.teacher_name} ...`);
       try {
-        const res = await fetch('http://localhost:5000/api/evaluation/submit', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: account.username, password: account.password, teacher: t, do_submit: true })
-        });
-        const data = await res.json();
-        if (data.success) {
+        const data = await apiEvaluationSubmit(account.username, account.password, t, true);
+        if (data.success || data.message?.includes('成功')) {
           ok++;
           setTeachers(prev => prev.map(p => p.teacher_id === t.teacher_id && p.url === t.url ? { ...p, submitted: '是' } : p));
         } else { fail++; console.error(`${t.teacher_name} - ${data.message}`); }
@@ -144,24 +135,22 @@ function EvaluationQuery({ account }) {
 
       <style>{`
         .eq-root {}
-        .eq-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-        .eq-header h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
-        .eq-actions { display: flex; gap: 8px; align-items: center; }
+        .eq-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+        .eq-header h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+        .eq-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
         .btn {
-          height: 28px; padding: 0 12px; border: 0; border-radius: var(--radius-xs);
+          height: 30px; padding: 0 11px; border: 0; border-radius: var(--radius-xs);
           font: 500 12px/1 var(--font); cursor: pointer; white-space: nowrap;
-          transition: opacity 0.12s;
+          transition: opacity 0.12s; -webkit-tap-highlight-color: transparent;
         }
         .btn:active { transform: scale(0.97); }
         .btn-outline { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-        .btn-outline:hover { background: var(--surface-hover); }
         .btn-outline:disabled { opacity: 0.4; cursor: default; }
         .btn-green { background: var(--success-fg); color: #fff; }
-        .btn-green:hover { opacity: 0.88; }
         .btn-green:disabled { opacity: 0.5; cursor: default; }
 
-        .msg { padding: 9px 14px; margin-bottom: 12px; border-radius: var(--radius-sm); font-size: 13px; }
+        .msg { padding: 9px 14px; margin-bottom: 10px; border-radius: var(--radius-sm); font-size: 13px; }
         .msg-success { background: var(--success-bg); color: var(--success-fg); }
         .msg-error { background: var(--danger-bg); color: var(--danger-fg); }
         .msg-info { background: var(--info-bg); color: var(--info-fg); }
@@ -171,22 +160,22 @@ function EvaluationQuery({ account }) {
         .eq-progress-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.3s; }
         .eq-progress-text { font-size: 12px; color: var(--info-fg); white-space: nowrap; }
 
-        .eq-stats { display: flex; gap: 12px; margin-bottom: 14px; }
-        .eq-stat { flex: 1; padding: 12px 16px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); }
-        .eq-stat-lbl { font-size: 11px; color: var(--muted); letter-spacing: 0.03em; margin-bottom: 3px; }
-        .eq-stat-val { font: 600 22px/1.2 system-ui; letter-spacing: -0.02em; }
+        .eq-stats { display: flex; gap: 10px; margin-bottom: 12px; }
+        .eq-stat { flex: 1; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); }
+        .eq-stat-lbl { font-size: 11px; color: var(--muted); letter-spacing: 0.03em; margin-bottom: 2px; }
+        .eq-stat-val { font: 600 20px/1.2 system-ui; letter-spacing: -0.02em; }
 
-        .eq-table-wrap { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-        .eq-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .eq-table-wrap { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .eq-table { min-width: 600px; width: 100%; border-collapse: collapse; font-size: 12px; }
         .eq-table thead { background: var(--surface); }
-        .eq-table th { padding: 7px 9px; text-align: left; font-weight: 500; color: var(--muted); white-space: nowrap; border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: 0.02em; }
-        .eq-table td { padding: 6px 9px; color: var(--fg); border-bottom: 1px solid var(--border); }
+        .eq-table th { padding: 7px 8px; text-align: left; font-weight: 500; color: var(--muted); white-space: nowrap; border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: 0.02em; }
+        .eq-table td { padding: 6px 8px; color: var(--fg); border-bottom: 1px solid var(--border); white-space: nowrap; }
         .eq-table tbody tr:last-child td { border-bottom: 0; }
         .eq-table tbody tr:nth-child(even) { background: var(--surface); }
         .tr-done { background: var(--success-bg) !important; }
         .td-muted { color: var(--muted) !important; }
 
-        .e-badge { display: inline-block; padding: 0 6px; height: 19px; line-height: 19px; font-size: 11px; font-weight: 600; border-radius: 3px; white-space: nowrap; }
+        .e-badge { display: inline-block; padding: 1px 7px; height: 20px; line-height: 18px; font-size: 11px; font-weight: 600; border-radius: 4px; white-space: nowrap; }
         .e-done { background: var(--success-bg); color: var(--success-fg); }
         .e-pending { background: oklch(50% 0.14 50 / 0.08); color: oklch(42% 0.12 50); }
 
@@ -197,11 +186,18 @@ function EvaluationQuery({ account }) {
         }
         @keyframes eq-spin { to { transform: rotate(360deg); } }
 
-        .eq-empty { padding: 48px 0; text-align: center; }
+        .eq-empty { padding: 40px 0; text-align: center; }
         .eq-empty p { color: var(--muted); font-size: 14px; margin: 0 0 4px; }
         .eq-empty-hint { font-size: 12px; color: var(--muted); }
-        .eq-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 0; }
+        .eq-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 0; }
         .eq-loading p { font-size: 13px; color: var(--muted); margin: 0; }
+
+        @media (max-width: 480px) {
+          .eq-header { flex-direction: column; align-items: stretch; }
+          .eq-actions .btn { flex: 1; text-align: center; }
+          .eq-stats { gap: 8px; }
+          .eq-stat-val { font-size: 17px; }
+        }
       `}</style>
     </div>
   );

@@ -41,6 +41,9 @@
       "wix": {
         "language": "zh-CN"
       }
+    },
+    "android": {
+      "minSdkVersion": 24
     }
   }
 }

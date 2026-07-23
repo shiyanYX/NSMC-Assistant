@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AREA_DATA from './areaData';
+import { apiXg2Login, apiXg2EditForm, apiXg2Submit } from '../api';
 
 const LEAVE_TYPES = [
   { value: '02045001', label: '求职' }, { value: '02045002', label: '实习' },
@@ -99,10 +100,7 @@ export default function LeaveRegistration({ account }) {
     if (rememberXg2) localStorage.setItem('xg2_saved_login', JSON.stringify({username:xg2User,password:xg2Pass}));
     else localStorage.removeItem('xg2_saved_login');
     try {
-      const r = await fetch('http://localhost:5000/api/xg2/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:xg2User,password:xg2Pass})});
-      const d = await r.json();
-      if (!d.success) { setError(d.message||'获取编辑页失败'); return; }
-      const info = d.data;
+      const info = await apiXg2Login(xg2User, xg2Pass);
       setListData(info);
       setLoggedIn(true);
     } catch(e) { setError('网络错误: '+e.message); }
@@ -113,10 +111,8 @@ export default function LeaveRegistration({ account }) {
   const handleNew = async () => {
     setLoading(true); setError('');
     try {
-      const r = await fetch('http://localhost:5000/api/xg2/edit-form', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:xg2User})});
-      const d = await r.json();
-      if (!d.success) { setError(d.message||'获取编辑页失败'); return; }
-      setEditInfo(d.data);
+      const editData = await apiXg2EditForm(xg2User);
+      setEditInfo(editData);
       // Pre-fill dates from listData (edit page doesnt have them)
       sets('leaveBeginDate', listData?.begin_date||'');
       sets('leaveEndDate', listData?.end_date||'');
@@ -144,10 +140,8 @@ export default function LeaveRegistration({ account }) {
         'Leave1$GoDate':form.goDate,'Leave1$GoTime':form.goTime,'Leave1$GoVehicle':form.goVehicle,
         'Leave1$BackDate':form.backDate,'Leave1$BackTime':form.backTime,'Leave1$BackVehicle':form.backVehicle,
       };
-      const r = await fetch('http://localhost:5000/api/xg2/submit', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:xg2User,form_fields:fields})});
-      const d = await r.json();
-      if (!d.success) { setError(d.message||'提交失败'); return; }
-      setSuccessMsg('✅ '+d.message);
+      const msg = await apiXg2Submit(xg2User, fields);
+      setSuccessMsg('✅ '+msg);
       setPage('done');
     } catch(e) { setError('网络错误: '+e.message); }
     finally { setLoading(false); }
@@ -370,18 +364,18 @@ export default function LeaveRegistration({ account }) {
 }
 
 const CSS = `
-.lr-root{max-width:900px;margin:0 auto}
+.lr-root{max-width:900px;margin:0 auto;padding-bottom:10px}
 .lr-login-card{max-width:380px;margin:40px auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px}
 .lr-login-card h2{font-size:18px;font-weight:600;margin:0 0 4px}
 .lr-login-desc{font-size:13px;color:var(--muted);margin:0 0 20px}
 .lr-btn-full{width:100%;height:40px}
-.lr-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px}
-.lr-header h2{font-size:17px;font-weight:600;margin:0}
+.lr-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap}
+.lr-header h2{font-size:16px;font-weight:600;margin:0}
 .lr-header-actions{display:flex;gap:8px;align-items:center}
 .lr-status{font-size:13px;font-weight:600;padding:3px 10px;border-radius:4px;background:var(--accent-bg)}
 .lr-info-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 18px;margin-bottom:16px}
 .lr-info-title{font-size:15px;font-weight:600;margin-bottom:6px;color:var(--accent)}
-.lr-info-row{display:flex;gap:24px;font-size:13px;color:var(--muted)}
+.lr-info-row{display:flex;gap:16px;font-size:13px;color:var(--muted);flex-wrap:wrap}
 .lr-info-memo{font-size:12px;color:var(--muted);margin:6px 0;line-height:1.5}
 .lr-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:8px}
 .lr-section-title{font-size:13px;font-weight:600;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border);color:var(--accent)}
@@ -389,47 +383,58 @@ const CSS = `
 .lr-field-row label{font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0}
 .lr-field-col{margin-bottom:6px}
 .lr-field-col label{display:block;font-size:12px;color:var(--muted);margin-bottom:2px}
-.lr-input,.lr-select{font:13px/1.4 var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border);border-radius:4px;outline:none;padding:4px 7px;height:28px}
-.lr-input[type="date"]{width:140px;min-width:140px}
+.lr-input,.lr-select{font:13px/1.4 var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border);border-radius:5px;outline:none;padding:6px 8px;height:36px;box-sizing:border-box}
+.lr-input[type="date"]{width:140px;min-width:120px}
 .lr-input:focus,.lr-select:focus{border-color:var(--accent)}
 .lr-select{cursor:pointer}
-.lr-select-sm{width:60px}
-.lr-textarea{width:100%;resize:vertical;font:13px/1.4 var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border);border-radius:4px;outline:none;padding:5px 7px}
-.area-picker{display:inline-flex;gap:4px}
-.area-picker select{width:auto;min-width:80px}
-.lr-radio-label{display:inline-flex;align-items:center;gap:2px;cursor:pointer;font-size:13px;padding:1px 5px;border-radius:4px}
-.lr-radio-label input{accent-color:var(--accent)}
+.lr-select-sm{width:65px}
+.lr-textarea{width:100%;resize:vertical;font:13px/1.4 var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border);border-radius:4px;outline:none;padding:6px 8px;box-sizing:border-box}
+.area-picker{display:inline-flex;gap:4px;flex-wrap:wrap}
+.area-picker select{width:auto;min-width:80px;height:36px}
+.lr-radio-label{display:inline-flex;align-items:center;gap:3px;cursor:pointer;font-size:13px;padding:3px 7px;border-radius:5px;min-height:32px}
+.lr-radio-label input{accent-color:var(--accent);width:16px;height:16px}
 .lr-duration{font-size:12px;color:var(--accent);font-weight:500}
 .lr-duration-o{border:none;text-align:center;width:35px;font-weight:400;background:transparent}
 .req{color:var(--danger-fg);font-weight:700;margin-right:2px}
 .lr-bottom{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;padding-bottom:20px}
 
-/* Official table style */
-.lr-official-table{width:100%;border-collapse:collapse;margin-bottom:8px;border:1px solid #ccc}
-.lr-official-table td{padding:6px 8px;border:1px solid #d4d4d4;font-size:12px;line-height:1.6}
-.lr-ot-title{background:#e8e8e8;font-weight:600;font-size:13px;padding:7px 10px}
-.lr-ot-label{background:#f5f5f5;font-weight:400;color:#333;text-align:right;white-space:nowrap;width:15%}
-.lr-ot-value{background:#fff;color:#333}
-.lr-ot-textarea{width:100%;height:90px;border:1px solid #ccc;padding:4px;font:12px/1.5 system-ui;resize:vertical;box-sizing:border-box}
+.lr-official-table{width:100%;border-collapse:collapse;margin-bottom:8px;border:1px solid var(--border)}
+.lr-official-table td{padding:6px 8px;border:1px solid var(--border);font-size:12px;line-height:1.6}
+.lr-ot-title{background:var(--surface);font-weight:600;font-size:13px;padding:7px 10px;border-bottom:1px solid var(--border)}
+.lr-ot-label{background:var(--accent-bg);font-weight:500;color:var(--muted);text-align:right;white-space:nowrap;width:15%}
+.lr-ot-value{background:var(--surface);color:var(--fg)}
+.lr-ot-textarea{width:100%;height:80px;border:1px solid var(--border);padding:6px;font:12px/1.5 system-ui;resize:vertical;box-sizing:border-box;background:var(--bg)}
 
-.lr-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}
-.lr-table th{padding:6px 8px;text-align:left;font-weight:500;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border)}
-.lr-table td{padding:5px 8px;border-bottom:1px solid var(--border)}
+.lr-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;overflow-x:auto;display:block;-webkit-overflow-scrolling:touch}
+.lr-table th{padding:6px 8px;text-align:left;font-weight:500;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border);white-space:nowrap}
+.lr-table td{padding:5px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
 .lr-table tbody tr:nth-child(even){background:var(--surface)}
 
-.lr-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;display:flex;align-items:center;justify-content:center}
-.lr-dialog{background:var(--surface);border-radius:var(--radius);width:420px;max-height:70vh;padding:20px;overflow-y:auto}
+.lr-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+.lr-dialog{background:var(--surface);border-radius:var(--radius);width:100%;max-width:420px;max-height:80vh;padding:20px;overflow-y:auto}
 .lr-dialog h3{font-size:15px;font-weight:600;margin:0 0 12px}
 .lr-dialog hr{border:none;border-top:1px solid var(--border);margin:10px 0}
-.lr-dialog-row{display:flex;gap:8px;align-items:center}
-.lr-tpl-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)}
+.lr-dialog-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lr-tpl-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
 .lr-tpl-name{flex:1;font-size:13px;font-weight:500}
 .lr-tpl-date{font-size:11px;color:var(--muted)}
 .lr-empty{font-size:13px;color:var(--muted);text-align:center;padding:16px 0}
 .lr-checkbox{display:flex;align-items:center;gap:6px;margin-bottom:14px;cursor:pointer;font-size:13px;color:var(--muted)}
-.lr-checkbox input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
-.lr-done{text-align:center;padding:60px 20px}
+.lr-checkbox input{accent-color:var(--accent);width:16px;height:16px;cursor:pointer}
+.lr-done{text-align:center;padding:40px 20px}
 .lr-done-icon{font-size:48px;margin-bottom:12px}
 .lr-done h2{font-size:20px;font-weight:600;margin:0 0 6px}
 .lr-done p{font-size:14px;color:var(--muted);margin:0 0 20px}
+
+@media(max-width:640px){
+  .lr-login-card{margin:20px auto;padding:20px}
+  .lr-input,.lr-select,.lr-input[type="date"]{width:100%!important;min-width:0!important}
+  .area-picker{width:100%}
+  .area-picker select{flex:1;min-width:0}
+  .lr-official-table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .lr-official-table td{padding:5px 6px}
+  .lr-ot-label{white-space:nowrap;width:auto;min-width:70px}
+  .lr-radio-label{font-size:12px;padding:2px 5px}
+  .lr-dialog{width:100%}
+}
 `;
